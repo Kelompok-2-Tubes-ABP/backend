@@ -208,17 +208,24 @@ func (b *BudgetService) UpdateBudget(budgetID primitive.ObjectID, userID string,
 }
 
 func (b *BudgetService) DeleteBudget(budgetID primitive.ObjectID, userID string) error {
-	result, err := b.collection.DeleteOne(context.TODO(), bson.M{
-		"_id":     budgetID,
-		"user_id": userID,
-	})
+	// 1. Get budget info first to know the month
+	var budget models.MonthlyBudget
+	err := b.collection.FindOne(context.TODO(), bson.M{"_id": budgetID, "user_id": userID}).Decode(&budget)
+	if err != nil {
+		return errors.New("budget not found")
+	}
+
+	// 2. Delete the Monthly Budget
+	_, err = b.collection.DeleteOne(context.TODO(), bson.M{"_id": budgetID, "user_id": userID})
 	if err != nil {
 		return err
 	}
 
-	if result.DeletedCount == 0 {
-		return errors.New("budget not found")
-	}
+	// 3. Cascading Delete: Delete all category budgets for that month
+	_, _ = b.categoryBudgetCol.DeleteMany(context.TODO(), bson.M{
+		"user_id": userID,
+		"month":   budget.Month,
+	})
 
 	return nil
 }
@@ -255,28 +262,34 @@ func (b *BudgetService) CalculateSpending(userID, month string) (float64, error)
 		return 0, errors.New("transaction collection not initialized")
 	}
 
-	cursor, err := b.transactionCol.Find(context.TODO(), bson.M{
-		"user_id": userID,
-		"month":   month,
-	})
+	pipeline := mongo.Pipeline{
+		{{"$match", bson.D{
+			{"user_id", userID},
+			{"month", month},
+		}}},
+		{{"$group", bson.D{
+			{"_id", nil},
+			{"total", bson.D{{"$sum", "$amount"}}},
+		}}},
+	}
+
+	cursor, err := b.transactionCol.Aggregate(context.TODO(), pipeline)
 	if err != nil {
 		return 0, err
 	}
 	defer cursor.Close(context.TODO())
 
-	var transactions []models.Transaction
-	if err := cursor.All(context.TODO(), &transactions); err != nil {
-		return 0, err
-	}
-
-	totalSpending := 0.0
-	for _, t := range transactions {
-		if utils.IsOutcome(t.Category) {
-			totalSpending += t.Amount
+	if cursor.Next(context.TODO()) {
+		var result struct {
+			Total float64 `bson:"total"`
 		}
+		if err := cursor.Decode(&result); err != nil {
+			return 0, err
+		}
+		return result.Total, nil
 	}
 
-	return totalSpending, nil
+	return 0, nil
 }
 
 func (b *BudgetService) GetAllBudgetsWithSpending(userID string) ([]map[string]interface{}, error) {
