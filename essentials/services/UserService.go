@@ -78,7 +78,7 @@ func (s *UserService) CreateUser(user models.User) (models.User, error) {
 	}
 	user.Password = hashedPassword
 
-	user.IsActive = true
+	user.IsActive = false
 	user.IsEmailVerified = false
 	user.CreatedAt = time.Now()
 	user.UpdatedAt = time.Now()

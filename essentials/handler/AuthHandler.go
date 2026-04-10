@@ -54,7 +54,6 @@ func (h *AuthHandler) SendVerificationEmail() gin.HandlerFunc {
 				c.JSON(http.StatusOK, gin.H{
 					"message":   "verification code generated",
 					"email":     email,
-					"code":      code,
 					"email_err": err.Error(),
 				})
 				return
@@ -273,7 +272,6 @@ func (h *AuthHandler) ResendVerification() gin.HandlerFunc {
 				c.JSON(http.StatusOK, gin.H{
 					"message":   "verification code generated",
 					"email":     req.Email,
-					"code":      code,
 					"email_err": err.Error(),
 				})
 				return
