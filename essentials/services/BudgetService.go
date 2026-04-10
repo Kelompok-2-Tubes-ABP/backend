@@ -223,7 +223,7 @@ func (b *BudgetService) CalculateSpending(userID, month string) (float64, error)
 
 	totalSpending := 0.0
 	for _, t := range transactions {
-		if t.Category == "outcome" {
+		if utils.IsOutcome(t.Category) {
 			totalSpending += t.Amount
 		}
 	}
@@ -508,7 +508,7 @@ func (b *BudgetService) updateCategoryBudgetSpent(budget *models.CategoryBudget)
 
 	totalSpent := 0.0
 	for _, t := range transactions {
-		if t.Category == "outcome" {
+		if utils.IsOutcome(t.Category) {
 			totalSpent += t.Amount
 		}
 	}
@@ -538,7 +538,7 @@ func (b *BudgetService) CalculateCategorySpending(userID, month, category string
 
 	totalSpent := 0.0
 	for _, t := range transactions {
-		if t.Category == "outcome" {
+		if utils.IsOutcome(t.Category) {
 			totalSpent += t.Amount
 		}
 	}

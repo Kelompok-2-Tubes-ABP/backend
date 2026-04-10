@@ -4,8 +4,8 @@ import (
 	"context"
 	"financeapi/essentials/config"
 	models "financeapi/essentials/models"
+	"financeapi/essentials/utils"
 	"fmt"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -41,7 +41,7 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 
 	totalOutcome := 0.0
 	for _, t := range transactions {
-		if t.Category == "outcome" {
+		if utils.IsOutcome(t.Category) {
 			totalOutcome += t.Amount
 		}
 	}
@@ -62,14 +62,16 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 			return models.Transaction{}, err
 		}
 	} else {
-		if totalOutcome+transaction.Amount > budget.Limit {
-			return models.Transaction{}, fmt.Errorf(
-				"❌ Budget exceeded: total %.2f / limit %.2f",
-				totalOutcome+transaction.Amount, budget.Limit,
-			)
-		} else if totalOutcome+transaction.Amount > 0.9*budget.Limit {
-			fmt.Printf("⚠️ Warning: You've reached 90%% of your monthly budget (%.2f / %.2f)\n",
-				totalOutcome+transaction.Amount, budget.Limit)
+		if utils.IsOutcome(transaction.Category) {
+			if totalOutcome+transaction.Amount > budget.Limit {
+				return models.Transaction{}, fmt.Errorf(
+					"❌ Budget exceeded: total %.2f / limit %.2f",
+					totalOutcome+transaction.Amount, budget.Limit,
+				)
+			} else if totalOutcome+transaction.Amount > 0.9*budget.Limit {
+				fmt.Printf("⚠️ Warning: You've reached 90%% of your monthly budget (%.2f / %.2f)\n",
+					totalOutcome+transaction.Amount, budget.Limit)
+			}
 		}
 	}
 
@@ -178,23 +180,14 @@ func (t *TransactionService) GetMonthly(userID string, filter models.Report) (ma
 		return nil, err
 	}
 
-	incomeCategories := map[string]bool{
-		"income":     true,
-		"gaji":       true,
-		"salary":     true,
-		"pendapatan": true,
-		"revenue":    true,
-	}
-
 	totalIncome := 0.0
 	totalOutcome := 0.0
 	categoryBreakdown := make(map[string]float64)
 
 	for _, tr := range transactions {
 		category := tr.Category
-		categoryLower := strings.ToLower(category)
 
-		if incomeCategories[categoryLower] || incomeCategories[category] {
+		if utils.IsIncome(category) {
 			totalIncome += tr.Amount
 		} else {
 			totalOutcome += tr.Amount
@@ -292,7 +285,24 @@ func (t *TransactionService) UpdateTransaction(id primitive.ObjectID, tr models.
 	filter := bson.M{
 		"_id": id,
 	}
-	update := bson.M{"$set": tr}
+
+	updateFields := bson.M{}
+
+	if tr.Amount != 0 {
+		updateFields["amount"] = tr.Amount
+	}
+	if tr.Category != "" {
+		updateFields["category"] = tr.Category
+	}
+	if tr.Description != "" {
+		updateFields["description"] = tr.Description
+	}
+
+	if len(updateFields) == 0 {
+		return fmt.Errorf("no valid fields to update")
+	}
+
+	update := bson.M{"$set": updateFields}
 
 	_, err := t.collection.UpdateOne(context.TODO(), filter, update)
 

@@ -160,7 +160,7 @@ func (s *UserService) SendVerificationEmail(userID primitive.ObjectID) (string, 
 		UserID:    userID,
 		Token:     code,
 		Email:     user.Email,
-		ExpiresAt: time.Now().Add(24 * time.Hour),
+		ExpiresAt: time.Now().Add(1 * time.Minute),
 		CreatedAt: time.Now(),
 	}
 
@@ -193,7 +193,6 @@ func (s *UserService) VerifyVerificationCode(code string) error {
 	if err != nil {
 		return errors.New("invalid or expired verification code")
 	}
-
 	if time.Now().After(verification.ExpiresAt) {
 		return errors.New("verification code has expired")
 	}
@@ -215,6 +214,7 @@ func (s *UserService) VerifyVerificationCode(code string) error {
 			"is_email_verified":  true,
 			"email_verified_at":  time.Now(),
 			"verification_token": "",
+			"is_active":          true,
 		}},
 	)
 	if err != nil {
@@ -299,7 +299,7 @@ func (s *UserService) RequestPasswordReset(email string, ipAddress string) (stri
 		UserID:    user.ID,
 		Token:     token,
 		Email:     email,
-		ExpiresAt: time.Now().Add(15 * time.Minute),
+		ExpiresAt: time.Now().Add(1 * time.Minute),
 		IPAddress: ipAddress,
 		CreatedAt: time.Now(),
 	}
@@ -432,7 +432,10 @@ func (s *UserService) DeleteUser(userID primitive.ObjectID) error {
 	)
 	return err
 }
-
+func (s *UserService) HardDeleteUser(userID primitive.ObjectID) error {
+	_, err := s.collection.DeleteOne(context.TODO(), bson.M{"_id": userID})
+	return err
+}
 func (s *UserService) SendVerificationEmailByString(userIDStr string) (string, string, error) {
 	userID, err := primitive.ObjectIDFromHex(userIDStr)
 	if err != nil {
@@ -447,4 +450,54 @@ func (s *UserService) ChangePasswordByString(userIDStr string, currentPassword s
 		return errors.New("invalid user id")
 	}
 	return s.ChangePassword(userID, currentPassword, newPassword)
+}
+
+// CleanupExpiredVerifications removes expired verification requests and inactive users
+func (s *UserService) CleanupExpiredVerifications() error {
+	now := time.Now()
+
+	// Find all expired verification requests for inactive users
+	pipeline := []bson.M{
+		{
+			"$match": bson.M{
+				"expires_at": bson.M{"$lt": now},
+				"used_at":    nil,
+			},
+		},
+		{
+			"$lookup": bson.M{
+				"from":         "users",
+				"localField":   "user_id",
+				"foreignField": "_id",
+				"as":           "user",
+			},
+		},
+		{
+			"$match": bson.M{
+				"user.is_active": false,
+			},
+		},
+	}
+
+	cursor, err := s.verificationCollection.Aggregate(context.TODO(), pipeline)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(context.TODO())
+
+	var expiredVerifications []models.VerificationRequest
+	if err = cursor.All(context.TODO(), &expiredVerifications); err != nil {
+		return err
+	}
+
+	// Delete expired verification requests and inactive users
+	for _, verification := range expiredVerifications {
+		// Delete verification request
+		s.verificationCollection.DeleteOne(context.TODO(), bson.M{"_id": verification.ID})
+
+		// Delete inactive user
+		s.collection.DeleteOne(context.TODO(), bson.M{"_id": verification.UserID})
+	}
+
+	return nil
 }

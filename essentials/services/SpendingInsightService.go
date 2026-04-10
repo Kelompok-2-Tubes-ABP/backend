@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"financeapi/essentials/models"
+	"financeapi/essentials/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -158,7 +159,7 @@ func (s *SpendingInsightService) calculateSavingsRate(userID primitive.ObjectID)
 
 	for _, tx := range transactions {
 		if tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth) {
-			if tx.Category == "income" {
+			if utils.IsIncome(tx.Category) {
 				totalIncome += tx.Amount
 			} else {
 				totalExpense += tx.Amount
@@ -323,7 +324,7 @@ func (s *SpendingInsightService) calculateExpenseControl(userID primitive.Object
 	var recentExpenses []float64
 
 	for _, tx := range transactions {
-		if tx.Date.After(threeMonthsAgo) && tx.Category != "income" {
+		if tx.Date.After(threeMonthsAgo) && utils.IsOutcome(tx.Category) {
 			monthKey := tx.Date.Format("2006-01")
 			monthlyExpenses[monthKey] += tx.Amount
 			recentExpenses = append(recentExpenses, tx.Amount)
@@ -397,7 +398,7 @@ func (s *SpendingInsightService) getMonthlyIncome(userID primitive.ObjectID) flo
 	}
 
 	for _, tx := range transactions {
-		if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && tx.Category == "income" {
+		if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && utils.IsIncome(tx.Category) {
 			totalIncome += tx.Amount
 		}
 	}
@@ -418,7 +419,7 @@ func (s *SpendingInsightService) calculateSavingsRatePercent(userID primitive.Ob
 	transactions, _ := s.transactionService.ShowTransaction(userID.Hex())
 	for _, tx := range transactions {
 		if tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth) {
-			if tx.Category == "income" {
+			if utils.IsIncome(tx.Category) {
 				totalIncome += tx.Amount
 			} else {
 				totalExpense += tx.Amount
@@ -476,7 +477,7 @@ func (s *SpendingInsightService) calculateEmergencyFundMonths(userID primitive.O
 	if s.transactionService != nil {
 		transactions, _ := s.transactionService.ShowTransaction(userID.Hex())
 		for _, tx := range transactions {
-			if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && tx.Category != "income" {
+			if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && utils.IsOutcome(tx.Category) {
 				monthlyExpenses += tx.Amount
 			}
 		}

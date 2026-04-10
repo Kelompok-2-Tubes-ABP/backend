@@ -36,7 +36,7 @@ func RegisterHandler(userService *services.UserService, emailService *services.E
 			return
 		}
 
-		u.IsActive = true
+		u.IsActive = false
 
 		createdUser, err := userService.CreateUser(u)
 		if err != nil {
@@ -47,13 +47,12 @@ func RegisterHandler(userService *services.UserService, emailService *services.E
 		verificationToken, email, err := userService.SendVerificationEmail(createdUser.ID)
 		if err != nil {
 			c.JSON(201, gin.H{
-				"message":    "User registered successfully",
+				"message":    "User registered, but we couldn't send the email.",
 				"user_id":    createdUser.ID.Hex(),
 				"username":   createdUser.Username,
 				"email":      createdUser.Email,
 				"email_sent": false,
-				"warning":    "Failed to send verification email",
-			})
+				"warning":    "Please use the 'Resend Verification' feature to get your code."})
 			return
 		}
 
@@ -61,23 +60,22 @@ func RegisterHandler(userService *services.UserService, emailService *services.E
 			err = emailService.SendVerificationEmail(email, verificationToken, createdUser.Username)
 			if err != nil {
 				c.JSON(201, gin.H{
-					"message":    "User registered successfully",
+					"message":    "User registered, but we couldn't send the email.",
 					"user_id":    createdUser.ID.Hex(),
 					"username":   createdUser.Username,
 					"email":      createdUser.Email,
 					"email_sent": false,
-				})
+					"warning":    "Please use the 'Resend Verification' feature to get your code."})
 				return
 			}
 		}
 
 		c.JSON(201, gin.H{
-			"message":      "User registered successfully",
-			"user_id":      createdUser.ID.Hex(),
-			"username":     createdUser.Username,
-			"email":        createdUser.Email,
-			"email_sent":   true,
-			"verify_token": verificationToken,
+			"message":    "User registered successfully. Please check your email for verification code.",
+			"user_id":    createdUser.ID.Hex(),
+			"username":   createdUser.Username,
+			"email":      createdUser.Email,
+			"email_sent": true,
 		})
 	}
 }
