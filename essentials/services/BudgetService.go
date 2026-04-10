@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"financeapi/essentials/models"
@@ -36,6 +37,23 @@ func (b *BudgetService) GetCollection() *mongo.Collection {
 	return b.transactionCol
 }
 
+func (b *BudgetService) calculateStatus(limit, spent float64) string {
+	if limit <= 0 {
+		return string(models.CategoryBudgetStatusSafe)
+	}
+	percentageUsed := (spent / limit) * 100
+	switch {
+	case percentageUsed >= 100:
+		return string(models.CategoryBudgetStatusExceeded)
+	case percentageUsed >= 90:
+		return string(models.CategoryBudgetStatusWarning)
+	case percentageUsed >= 75:
+		return string(models.CategoryBudgetStatusCaution)
+	default:
+		return string(models.CategoryBudgetStatusSafe)
+	}
+}
+
 func (b *BudgetService) CreateBudget(budget models.MonthlyBudget) (models.MonthlyBudget, error) {
 	if budget.Limit <= 0 {
 		return models.MonthlyBudget{}, errors.New("budget limit must be greater than 0")
@@ -47,6 +65,10 @@ func (b *BudgetService) CreateBudget(budget models.MonthlyBudget) (models.Monthl
 
 	if budget.Month == "" {
 		budget.Month = time.Now().Format("2006-01")
+	}
+
+	if !utils.IsValidMonthFormat(budget.Month) {
+		return models.MonthlyBudget{}, errors.New("invalid month format, use YYYY-MM")
 	}
 
 	existingBudget := models.MonthlyBudget{}
@@ -122,14 +144,49 @@ func (b *BudgetService) GetBudgetByMonth(userID, month string) (models.MonthlyBu
 }
 
 func (b *BudgetService) UpdateBudget(budgetID primitive.ObjectID, userID string, updates bson.M) (models.MonthlyBudget, error) {
+	// 1. Get current budget state
+	var currentBudget models.MonthlyBudget
+	err := b.collection.FindOne(context.TODO(), bson.M{"_id": budgetID, "user_id": userID}).Decode(&currentBudget)
+	if err != nil {
+		return models.MonthlyBudget{}, errors.New("budget not found")
+	}
+
+	// 2. Validate Limit if it's being updated
 	if limit, ok := updates["limit"].(float64); ok {
 		if limit <= 0 {
 			return models.MonthlyBudget{}, errors.New("budget limit must be greater than 0")
 		}
+
+		// Consistency Check: Total category budget limits must not exceed new monthly limit
+		categoryBudgets, _ := b.GetCategoryBudgetByMonth(userID, currentBudget.Month)
+		totalCategoryLimits := 0.0
+		for _, cat := range categoryBudgets {
+			totalCategoryLimits += cat.Limit
+		}
+		if totalCategoryLimits > limit {
+			return models.MonthlyBudget{}, fmt.Errorf("new limit %.2f is lower than total category budgets (%.2f). Update category budgets first", limit, totalCategoryLimits)
+		}
 	}
 
+	// 3. Validate Month if it's being updated
 	if month, ok := updates["month"].(string); ok {
-		updates["month"] = utils.SanitizeMongoValue(month)
+		if !utils.IsValidMonthFormat(month) {
+			return models.MonthlyBudget{}, errors.New("invalid month format, use YYYY-MM")
+		}
+
+		// Check for duplication only if month is actually changing
+		if month != currentBudget.Month {
+			existingBudget := models.MonthlyBudget{}
+			err := b.collection.FindOne(context.TODO(), bson.M{
+				"user_id": userID,
+				"month":   month,
+			}).Decode(&existingBudget)
+
+			if err == nil {
+				return models.MonthlyBudget{}, errors.New("budget for target month already exists")
+			}
+		}
+		updates["month"] = month
 	}
 
 	updates["updated_at"] = time.Now()
@@ -144,7 +201,7 @@ func (b *BudgetService) UpdateBudget(budgetID primitive.ObjectID, userID string,
 
 	var budget models.MonthlyBudget
 	if err := result.Decode(&budget); err != nil {
-		return models.MonthlyBudget{}, errors.New("budget not found")
+		return models.MonthlyBudget{}, err
 	}
 
 	return budget, nil
@@ -184,21 +241,12 @@ func (b *BudgetService) GetBudgetWithSpending(userID, month string) (map[string]
 		percentageUsed = (spending / budget.Limit) * 100
 	}
 
-	status := "safe"
-	if percentageUsed >= 100 {
-		status = "exceeded"
-	} else if percentageUsed >= 90 {
-		status = "warning"
-	} else if percentageUsed >= 75 {
-		status = "caution"
-	}
-
 	return map[string]interface{}{
 		"budget":          budget,
 		"spending":        spending,
 		"remaining":       remaining,
 		"percentage_used": percentageUsed,
-		"status":          status,
+		"status":          b.calculateStatus(budget.Limit, spending),
 	}, nil
 }
 
@@ -250,66 +298,46 @@ func (b *BudgetService) GetAllBudgetsWithSpending(userID string) ([]map[string]i
 			percentageUsed = (spending / budget.Limit) * 100
 		}
 
-		status := "safe"
-		if percentageUsed >= 100 {
-			status = "exceeded"
-		} else if percentageUsed >= 90 {
-			status = "warning"
-		} else if percentageUsed >= 75 {
-			status = "caution"
-		}
-
 		result = append(result, map[string]interface{}{
 			"budget":          budget,
 			"spending":        spending,
 			"remaining":       remaining,
 			"percentage_used": percentageUsed,
-			"status":          status,
+			"status":          b.calculateStatus(budget.Limit, spending),
 		})
 	}
 
 	return result, nil
 }
 
-func (b *BudgetService) GetBudgetSummary(userID string) (map[string]interface{}, error) {
-	budgets, err := b.GetUserBudgets(userID)
-	if err != nil {
-		return nil, err
+func (b *BudgetService) GetBudgetSummary(userID, month string) (map[string]interface{}, error) {
+	if month == "" {
+		month = time.Now().Format("2006-01")
 	}
 
-	if len(budgets) == 0 {
+	budget, err := b.GetBudgetByMonth(userID, month)
+	if err != nil {
+		// If no budget for this month, return zero summary instead of error
 		return map[string]interface{}{
-			"total_budgets":   0,
+			"month":           month,
 			"total_budgeted":  0,
 			"total_spent":     0,
 			"total_remaining": 0,
-			"average_budget":  0,
-			"average_spent":   0,
+			"status":          "no_budget",
 		}, nil
 	}
 
-	totalBudgeted := 0.0
-	totalSpent := 0.0
-
-	for _, budget := range budgets {
-		spending, err := b.CalculateSpending(userID, budget.Month)
-		if err != nil {
-			spending = 0
-		}
-
-		totalBudgeted += budget.Limit
-		totalSpent += spending
+	spending, err := b.CalculateSpending(userID, month)
+	if err != nil {
+		spending = 0
 	}
 
-	totalRemaining := totalBudgeted - totalSpent
-
 	return map[string]interface{}{
-		"total_budgets":   len(budgets),
-		"total_budgeted":  totalBudgeted,
-		"total_spent":     totalSpent,
-		"total_remaining": totalRemaining,
-		"average_budget":  totalBudgeted / float64(len(budgets)),
-		"average_spent":   totalSpent / float64(len(budgets)),
+		"month":           month,
+		"total_budgeted":  budget.Limit,
+		"total_spent":     spending,
+		"total_remaining": budget.Limit - spending,
+		"status":          b.calculateStatus(budget.Limit, spending),
 	}, nil
 }
 
@@ -332,6 +360,10 @@ func (b *BudgetService) CreateCategoryBudget(budget models.CategoryBudget) (mode
 		budget.Month = time.Now().Format("2006-01")
 	}
 
+	if !utils.IsValidMonthFormat(budget.Month) {
+		return models.CategoryBudget{}, errors.New("invalid month format, use YYYY-MM")
+	}
+
 	existingBudget := models.CategoryBudget{}
 	err := b.categoryBudgetCol.FindOne(context.TODO(), bson.M{
 		"user_id":  budget.UserID,
@@ -345,6 +377,22 @@ func (b *BudgetService) CreateCategoryBudget(budget models.CategoryBudget) (mode
 
 	if err != mongo.ErrNoDocuments {
 		return models.CategoryBudget{}, err
+	}
+
+	// Cross-validation: Check against Monthly Budget
+	monthlyBudget, err := b.GetBudgetByMonth(budget.UserID, budget.Month)
+	if err != nil {
+		return models.CategoryBudget{}, errors.New("monthly budget must be created first before setting category budgets")
+	}
+
+	existingCategories, _ := b.GetCategoryBudgetByMonth(budget.UserID, budget.Month)
+	totalUsed := 0.0
+	for _, cat := range existingCategories {
+		totalUsed += cat.Limit
+	}
+
+	if totalUsed+budget.Limit > monthlyBudget.Limit {
+		return models.CategoryBudget{}, fmt.Errorf("total category budgets (%.2f) would exceed monthly limit (%.2f)", totalUsed+budget.Limit, monthlyBudget.Limit)
 	}
 
 	budget.Spent = 0
@@ -400,22 +448,49 @@ func (b *BudgetService) GetUserCategoryBudgets(userID string) ([]models.Category
 }
 
 func (b *BudgetService) GetCategoryBudgetByMonth(userID, month string) ([]models.CategoryBudget, error) {
-	cursor, err := b.categoryBudgetCol.Find(context.TODO(), bson.M{
+	// Optimization: Use aggregation to calculate spending for all budgets in this month in one go
+	pipeline := mongo.Pipeline{
+		{{"$match", bson.D{{"user_id", userID}, {"month", month}}}},
+		{{"$group", bson.D{
+			{"_id", "$category"},
+			{"total", bson.D{{"$sum", "$amount"}}},
+		}}},
+	}
+
+	cursor, err := b.transactionCol.Aggregate(context.TODO(), pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	spendingMap := make(map[string]float64)
+	for cursor.Next(context.TODO()) {
+		var res struct {
+			Category string  `bson:"_id"`
+			Total    float64 `bson:"total"`
+		}
+		if err := cursor.Decode(&res); err == nil {
+			spendingMap[res.Category] = res.Total
+		}
+	}
+
+	// Fetch the budgets
+	cursorBudget, err := b.categoryBudgetCol.Find(context.TODO(), bson.M{
 		"user_id": userID,
 		"month":   month,
 	})
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(context.TODO())
+	defer cursorBudget.Close(context.TODO())
 
 	var budgets []models.CategoryBudget
-	if err := cursor.All(context.TODO(), &budgets); err != nil {
+	if err := cursorBudget.All(context.TODO(), &budgets); err != nil {
 		return nil, err
 	}
 
 	for i := range budgets {
-		b.updateCategoryBudgetSpent(&budgets[i])
+		budgets[i].Spent = spendingMap[budgets[i].Category]
 	}
 
 	return budgets, nil
@@ -442,9 +517,32 @@ func (b *BudgetService) GetCategoryBudgetByCategory(userID, month, category stri
 }
 
 func (b *BudgetService) UpdateCategoryBudget(budgetID primitive.ObjectID, userID string, updates bson.M) (models.CategoryBudget, error) {
-	if limit, ok := updates["limit"].(float64); ok {
-		if limit <= 0 {
+	// 1. Get current state
+	var current models.CategoryBudget
+	err := b.categoryBudgetCol.FindOne(context.TODO(), bson.M{"_id": budgetID, "user_id": userID}).Decode(&current)
+	if err != nil {
+		return models.CategoryBudget{}, errors.New("category budget not found")
+	}
+
+	// 2. Validate Limit consistency if changed
+	if newLimit, ok := updates["limit"].(float64); ok {
+		if newLimit <= 0 {
 			return models.CategoryBudget{}, errors.New("budget limit must be greater than 0")
+		}
+
+		monthlyBudget, err := b.GetBudgetByMonth(userID, current.Month)
+		if err == nil {
+			existingCategories, _ := b.GetCategoryBudgetByMonth(userID, current.Month)
+			totalOtherCategories := 0.0
+			for _, cat := range existingCategories {
+				if cat.ID != budgetID {
+					totalOtherCategories += cat.Limit
+				}
+			}
+
+			if totalOtherCategories+newLimit > monthlyBudget.Limit {
+				return models.CategoryBudget{}, fmt.Errorf("total category budgets (%.2f) would exceed monthly limit (%.2f)", totalOtherCategories+newLimit, monthlyBudget.Limit)
+			}
 		}
 	}
 
@@ -464,7 +562,7 @@ func (b *BudgetService) UpdateCategoryBudget(budgetID primitive.ObjectID, userID
 
 	var budget models.CategoryBudget
 	if err := result.Decode(&budget); err != nil {
-		return models.CategoryBudget{}, errors.New("category budget not found")
+		return models.CategoryBudget{}, err
 	}
 
 	return budget, nil
@@ -569,14 +667,19 @@ func (b *BudgetService) GetAllCategoryBudgetsWithSpending(userID, month string) 
 	return result, nil
 }
 
-func (b *BudgetService) GetCategoryBudgetSummary(userID string) (map[string]interface{}, error) {
-	budgets, err := b.GetUserCategoryBudgets(userID)
+func (b *BudgetService) GetCategoryBudgetSummary(userID, month string) (map[string]interface{}, error) {
+	if month == "" {
+		month = time.Now().Format("2006-01")
+	}
+
+	budgets, err := b.GetCategoryBudgetByMonth(userID, month)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(budgets) == 0 {
 		return map[string]interface{}{
+			"month":            month,
 			"total_categories": 0,
 			"total_budgeted":   0,
 			"total_spent":      0,
@@ -593,10 +696,12 @@ func (b *BudgetService) GetCategoryBudgetSummary(userID string) (map[string]inte
 	}
 
 	return map[string]interface{}{
+		"month":            month,
 		"total_categories": len(budgets),
 		"total_budgeted":   totalBudgeted,
 		"total_spent":      totalSpent,
 		"total_remaining":  totalBudgeted - totalSpent,
+		"status":           b.calculateStatus(totalBudgeted, totalSpent),
 	}, nil
 }
 
@@ -608,22 +713,10 @@ func (b *BudgetService) categoryBudgetToMap(budget models.CategoryBudget) map[st
 		percentageUsed = (budget.Spent / budget.Limit) * 100
 	}
 
-	var status string
-	switch {
-	case percentageUsed >= 100:
-		status = string(models.CategoryBudgetStatusExceeded)
-	case percentageUsed >= 90:
-		status = string(models.CategoryBudgetStatusWarning)
-	case percentageUsed >= 75:
-		status = string(models.CategoryBudgetStatusCaution)
-	default:
-		status = string(models.CategoryBudgetStatusSafe)
-	}
-
 	return map[string]interface{}{
 		"budget":          budget,
 		"remaining":       remaining,
 		"percentage_used": percentageUsed,
-		"status":          status,
+		"status":          b.calculateStatus(budget.Limit, budget.Spent),
 	}
 }

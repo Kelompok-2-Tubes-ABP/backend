@@ -145,43 +145,45 @@ func (s *AccountService) UpdateBalance(accountID primitive.ObjectID, userID prim
 }
 
 func (s *AccountService) TransferBetweenAccounts(userID primitive.ObjectID, transfer models.AccountTransaction) error {
-	_, err := s.GetAccount(transfer.FromAccountID, userID)
+	fromAccount, err := s.GetAccount(transfer.FromAccountID, userID)
 	if err != nil {
 		return errors.New("source account not found")
 	}
 
-	_, err = s.GetAccount(transfer.ToAccountID, userID)
+	toAccount, err := s.GetAccount(transfer.ToAccountID, userID)
 	if err != nil {
 		return errors.New("destination account not found")
 	}
 
-	fromAccount, _ := s.GetAccount(transfer.FromAccountID, userID)
 	if fromAccount.CurrentBalance < transfer.Amount {
 		return errors.New("insufficient balance")
 	}
 
+	// Update source account
 	_, err = s.collection.UpdateOne(
 		context.TODO(),
-		bson.M{"_id": transfer.FromAccountID, "user_id": userID},
+		bson.M{"_id": fromAccount.ID, "user_id": userID},
 		bson.M{
 			"$inc": bson.M{"current_balance": -transfer.Amount},
 			"$set": bson.M{"updated_at": time.Now()},
 		},
 	)
 	if err != nil {
-		return err
+		return errors.New("failed to deduct balance from source account")
 	}
 
+	// Update destination account
 	_, err = s.collection.UpdateOne(
 		context.TODO(),
-		bson.M{"_id": transfer.ToAccountID, "user_id": userID},
+		bson.M{"_id": toAccount.ID, "user_id": userID},
 		bson.M{
 			"$inc": bson.M{"current_balance": transfer.Amount},
 			"$set": bson.M{"updated_at": time.Now()},
 		},
 	)
 	if err != nil {
-		return err
+		// Caution: Balance was deducted from source but not added to destination yet
+		return errors.New("critical: failed to add balance to destination account")
 	}
 
 	return nil

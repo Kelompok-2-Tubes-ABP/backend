@@ -317,13 +317,6 @@ func (s *AnalyticsService) calculateNetWorth(userOID primitive.ObjectID) (float6
 		}
 	}
 
-	if s.savingsGoalService != nil {
-		goals, _ := s.savingsGoalService.GetUserSavingsGoals(userOID.Hex())
-		for _, goal := range goals {
-			totalAssets += goal.CurrentAmount
-		}
-	}
-
 	if s.accountService != nil {
 		accounts, _ := s.accountService.GetUserAccounts(userOID)
 		for _, acc := range accounts {
@@ -423,7 +416,13 @@ func (s *AnalyticsService) getExpenseBreakdown(userID string, startDate, endDate
 		return []models.CategoryStat{}, nil
 	}
 
-	return []models.CategoryStat{}, nil
+	filter := models.FilterTransaction{
+		FromDate: startDate.Format("2006-01-02"),
+		ToDate:   endDate.Format("2006-01-02"),
+		Type:     "outcome",
+	}
+
+	return s.transactionService.GetCategoryStats(userID, filter)
 }
 
 func (s *AnalyticsService) getIncomeBreakdown(userID string, startDate, endDate time.Time) ([]models.CategoryStat, error) {
@@ -431,7 +430,13 @@ func (s *AnalyticsService) getIncomeBreakdown(userID string, startDate, endDate 
 		return []models.CategoryStat{}, nil
 	}
 
-	return []models.CategoryStat{}, nil
+	filter := models.FilterTransaction{
+		FromDate: startDate.Format("2006-01-02"),
+		ToDate:   endDate.Format("2006-01-02"),
+		Type:     "income",
+	}
+
+	return s.transactionService.GetCategoryStats(userID, filter)
 }
 
 func (s *AnalyticsService) getDebtBreakdown(userOID primitive.ObjectID) ([]models.DebtSummary, error) {

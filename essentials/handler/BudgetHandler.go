@@ -222,7 +222,12 @@ func (h *BudgetHandler) GetBudgetSummary() gin.HandlerFunc {
 			return
 		}
 
-		summary, err := h.service.GetBudgetSummary(userID.(string))
+		month := c.Query("month")
+		if month == "" {
+			month = time.Now().Format("2006-01")
+		}
+
+		summary, err := h.service.GetBudgetSummary(userID.(string), month)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -442,7 +447,12 @@ func (h *BudgetHandler) GetCategoryBudgetSummary() gin.HandlerFunc {
 			return
 		}
 
-		summary, err := h.service.GetCategoryBudgetSummary(userID.(string))
+		month := c.Query("month")
+		if month == "" {
+			month = time.Now().Format("2006-01")
+		}
+
+		summary, err := h.service.GetCategoryBudgetSummary(userID.(string), month)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

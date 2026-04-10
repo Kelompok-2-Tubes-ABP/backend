@@ -6,11 +6,13 @@ import (
 	models "financeapi/essentials/models"
 	"financeapi/essentials/utils"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type TransactionService struct {
@@ -20,6 +22,61 @@ type TransactionService struct {
 func NewTransactionService(client *mongo.Client, dbName string) *TransactionService {
 	collection := client.Database(dbName).Collection("Transaction")
 	return &TransactionService{collection: collection}
+}
+
+func buildFilters(userID string, filter models.FilterTransaction) bson.M {
+	filters := bson.M{
+		"user_id": userID,
+	}
+
+	if filter.MinAmount > 0 || filter.MaxAmount > 0 {
+		amountFilter := bson.M{}
+		if filter.MinAmount > 0 {
+			amountFilter["$gte"] = filter.MinAmount
+		}
+		if filter.MaxAmount > 0 {
+			amountFilter["$lte"] = filter.MaxAmount
+		}
+		filters["amount"] = amountFilter
+	}
+
+	if filter.Category != "" {
+		filters["category"] = filter.Category
+	} else if filter.Type != "" {
+		incomeCategories := []string{"income", "gaji", "salary", "pendapatan", "revenue"}
+		if filter.Type == "income" {
+			filters["category"] = bson.M{"$in": incomeCategories}
+		} else if filter.Type == "outcome" {
+			filters["category"] = bson.M{"$nin": incomeCategories}
+		}
+	}
+
+	if filter.FromDate != "" || filter.ToDate != "" {
+		dateFilter := bson.M{}
+		if filter.FromDate != "" {
+			fromTime, err := time.Parse("2006-01-02", filter.FromDate)
+			if err != nil {
+				fromTime, err = time.Parse(time.RFC3339, filter.FromDate)
+			}
+			if err == nil {
+				dateFilter["$gte"] = fromTime
+			}
+		}
+
+		if filter.ToDate != "" {
+			toTime, err := time.Parse("2006-01-02", filter.ToDate)
+			if err != nil {
+				toTime, err = time.Parse(time.RFC3339, filter.ToDate)
+			}
+			if err == nil {
+				toTime = toTime.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+				dateFilter["$lte"] = toTime
+			}
+		}
+
+		filters["date"] = dateFilter
+	}
+	return filters
 }
 func (s *TransactionService) CreateTransaction(transaction models.Transaction) (models.Transaction, error) {
 	filters := bson.M{
@@ -102,52 +159,20 @@ func (s *TransactionService) ShowTransaction(userID string) ([]models.Transactio
 }
 
 func (s *TransactionService) ShowTransactionByFilter(userID string, filter models.FilterTransaction) ([]models.Transaction, error) {
-	filters := bson.M{
-		"user_id": userID,
-	}
-	if filter.MinAmount > 0 || filter.MaxAmount > 0 {
-		amountFilter := bson.M{}
-		if filter.MinAmount > 0 {
-			amountFilter["$gte"] = filter.MinAmount
-		}
-		if filter.MaxAmount > 0 {
-			amountFilter["$lte"] = filter.MaxAmount
-		}
-		filters["amount"] = amountFilter
-	}
+	filters := buildFilters(userID, filter)
 
-	if filter.FromDate != "" || filter.ToDate != "" {
-		dateFilter := bson.M{}
-
-		if filter.FromDate != "" {
-			fromTime, err := time.Parse("2006-01-02", filter.FromDate)
-			if err != nil {
-				fromTime, _ = time.Parse(time.RFC3339, filter.FromDate)
-			}
-			if err == nil {
-				dateFilter["$gte"] = fromTime
-			}
-		}
-
-		if filter.ToDate != "" {
-			toTime, err := time.Parse("2006-01-02", filter.ToDate)
-			if err != nil {
-				toTime, _ = time.Parse(time.RFC3339, filter.ToDate)
-			}
-			if err == nil {
-				toTime = toTime.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-				dateFilter["$lte"] = toTime
-			}
-		}
-
-		filters["date"] = dateFilter
-	}
-
+	opts := options.Find()
 	if filter.SortBy != "" {
-		filters["category"] = filter.SortBy
+		sortOrder := 1
+		sortField := filter.SortBy
+		if strings.HasPrefix(filter.SortBy, "-") {
+			sortOrder = -1
+			sortField = strings.TrimPrefix(filter.SortBy, "-")
+		}
+		opts.SetSort(bson.D{{Key: sortField, Value: sortOrder}})
 	}
 
-	result, err := s.collection.Find(context.TODO(), filters)
+	result, err := s.collection.Find(context.TODO(), filters, opts)
 
 	if err != nil {
 		return nil, err
@@ -209,22 +234,7 @@ func (t *TransactionService) GetMonthly(userID string, filter models.Report) (ma
 	return report, nil
 }
 func (t *TransactionService) GetReport(userID string, filter models.FilterTransaction) (map[string]float64, error) {
-	filters := bson.M{
-		"user_id": userID,
-	}
-
-	if filter.FromDate != "" || filter.ToDate != "" {
-		dateFilter := bson.M{}
-		if filter.FromDate != "" {
-			fromTime, _ := time.Parse("2006-01-02", filter.FromDate)
-			dateFilter["$gte"] = fromTime
-		}
-		if filter.ToDate != "" {
-			toTime, _ := time.Parse("2006-01-02", filter.ToDate)
-			dateFilter["$lte"] = toTime
-		}
-		filters["date"] = dateFilter
-	}
+	filters := buildFilters(userID, filter)
 
 	pipeline := mongo.Pipeline{
 		{{"$match", filters}},
@@ -257,20 +267,59 @@ func (t *TransactionService) GetReport(userID string, filter models.FilterTransa
 	return report, nil
 }
 
-func BudgetingTransaction(budgett models.MonthlyBudget, userID string) (models.MonthlyBudget, error) {
-	collections := config.GetCollection(config.DB, "monthly_budget")
-	budget, err := collections.InsertOne(context.TODO(), budgett)
+func (s *TransactionService) GetCategoryStats(userID string, filter models.FilterTransaction) ([]models.CategoryStat, error) {
+	filters := buildFilters(userID, filter)
 
+	pipeline := mongo.Pipeline{
+		{{"$match", filters}},
+		{{"$group", bson.D{
+			{"_id", "$category"},
+			{"amount", bson.D{{"$sum", "$amount"}}},
+			{"transaction_count", bson.D{{"$sum", 1}}},
+			{"average_amount", bson.D{{"$avg", "$amount"}}},
+		}}},
+		{{"$sort", bson.D{{"amount", -1}}}},
+	}
+
+	cursor, err := s.collection.Aggregate(context.TODO(), pipeline)
 	if err != nil {
-		return models.MonthlyBudget{}, err
+		return nil, err
 	}
-	budgett.ID = budget.InsertedID.(primitive.ObjectID)
-	budgett.UserID = userID
-	if budgett.Month == "" {
-		budgett.Month = time.Now().Format("2006-01")
+	defer cursor.Close(context.TODO())
+
+	var results []struct {
+		Category         string  `bson:"_id"`
+		Amount           float64 `bson:"amount"`
+		TransactionCount int     `bson:"transaction_count"`
+		AverageAmount    float64 `bson:"average_amount"`
 	}
 
-	return budgett, nil
+	if err := cursor.All(context.TODO(), &results); err != nil {
+		return nil, err
+	}
+
+	var totalAmount float64
+	for _, r := range results {
+		totalAmount += r.Amount
+	}
+
+	var stats []models.CategoryStat
+	for _, r := range results {
+		percentage := 0.0
+		if totalAmount > 0 {
+			percentage = (r.Amount / totalAmount) * 100
+		}
+
+		stats = append(stats, models.CategoryStat{
+			Category:         r.Category,
+			Amount:           r.Amount,
+			Percentage:       percentage,
+			TransactionCount: r.TransactionCount,
+			AverageAmount:    r.AverageAmount,
+		})
+	}
+
+	return stats, nil
 }
 
 func (t *TransactionService) DeleteTransaction(id primitive.ObjectID) error {
