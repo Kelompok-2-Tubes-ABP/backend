@@ -20,11 +20,18 @@ func (h *BillReminderHandler) CreateBillReminder() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var bill models.BillReminder
 		if err := c.ShouldBindJSON(&bill); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid request"})
+			c.JSON(400, gin.H{"error": "Invalid request format"})
 			return
 		}
-		userID, _ := c.Get("user_id")
-		bill.UserID = userID.(primitive.ObjectID)
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		bill.UserID = userID
+
 		created, err := h.service.CreateBillReminder(bill)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -36,9 +43,20 @@ func (h *BillReminderHandler) CreateBillReminder() gin.HandlerFunc {
 
 func (h *BillReminderHandler) GetBillReminder() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, _ := primitive.ObjectIDFromHex(c.Param("id"))
-		userID, _ := c.Get("user_id")
-		bill, err := h.service.GetBillReminder(id, userID.(primitive.ObjectID))
+		id, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid bill ID"})
+			return
+		}
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		bill, err := h.service.GetBillReminder(id, userID)
 		if err != nil {
 			c.JSON(404, gin.H{"error": err.Error()})
 			return
@@ -49,50 +67,95 @@ func (h *BillReminderHandler) GetBillReminder() gin.HandlerFunc {
 
 func (h *BillReminderHandler) GetUserBillReminders() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		bills, err := h.service.GetUserBillReminders(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		bills, err := h.service.GetUserBillReminders(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
+
+		if bills == nil {
+			bills = []models.BillReminder{}
+		}
+
 		c.JSON(200, bills)
 	}
 }
 
 func (h *BillReminderHandler) GetDueBillReminders() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		bills, err := h.service.GetDueBillReminders(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		bills, err := h.service.GetDueBillReminders(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
+
+		if bills == nil {
+			bills = []models.BillReminder{}
+		}
+
 		c.JSON(200, bills)
 	}
 }
 
 func (h *BillReminderHandler) GetOverdueBillReminders() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		bills, err := h.service.GetOverdueBillReminders(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		bills, err := h.service.GetOverdueBillReminders(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
+
+		if bills == nil {
+			bills = []models.BillReminder{}
+		}
+
 		c.JSON(200, bills)
 	}
 }
 
 func (h *BillReminderHandler) UpdateBillReminder() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, _ := primitive.ObjectIDFromHex(c.Param("id"))
-		var updates map[string]interface{}
-		if err := c.ShouldBindJSON(&updates); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid request"})
+		id, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid bill ID"})
 			return
 		}
-		userID, _ := c.Get("user_id")
-		bill, err := h.service.UpdateBillReminder(id, userID.(primitive.ObjectID), updates)
+
+		var updates map[string]interface{}
+		if err := c.ShouldBindJSON(&updates); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request format"})
+			return
+		}
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		bill, err := h.service.UpdateBillReminder(id, userID, updates)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -103,14 +166,29 @@ func (h *BillReminderHandler) UpdateBillReminder() gin.HandlerFunc {
 
 func (h *BillReminderHandler) MarkAsPaid() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, _ := primitive.ObjectIDFromHex(c.Param("id"))
+		id, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid bill ID"})
+			return
+		}
+
 		var req struct {
-			Amount float64 `json:"amount"`
+			Amount float64 `json:"amount" binding:"required"`
 			Notes  string  `json:"notes"`
 		}
-		c.ShouldBindJSON(&req)
-		userID, _ := c.Get("user_id")
-		err := h.service.MarkAsPaid(id, userID.(primitive.ObjectID), req.Amount, req.Notes)
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "amount is required"})
+			return
+		}
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		err = h.service.MarkAsPaid(id, userID, req.Amount, req.Notes)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -121,9 +199,20 @@ func (h *BillReminderHandler) MarkAsPaid() gin.HandlerFunc {
 
 func (h *BillReminderHandler) DeleteBillReminder() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, _ := primitive.ObjectIDFromHex(c.Param("id"))
-		userID, _ := c.Get("user_id")
-		err := h.service.DeleteBillReminder(id, userID.(primitive.ObjectID))
+		id, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid bill ID"})
+			return
+		}
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		err = h.service.DeleteBillReminder(id, userID)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -134,8 +223,14 @@ func (h *BillReminderHandler) DeleteBillReminder() gin.HandlerFunc {
 
 func (h *BillReminderHandler) GetBillSummary() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		summary, err := h.service.GetBillSummary(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		summary, err := h.service.GetBillSummary(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -146,13 +241,29 @@ func (h *BillReminderHandler) GetBillSummary() gin.HandlerFunc {
 
 func (h *BillReminderHandler) GetPaymentHistory() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, _ := primitive.ObjectIDFromHex(c.Param("id"))
-		userID, _ := c.Get("user_id")
-		payments, err := h.service.GetPaymentHistory(id, userID.(primitive.ObjectID))
+		id, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid bill ID"})
+			return
+		}
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		payments, err := h.service.GetPaymentHistory(id, userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
+
+		if payments == nil {
+			payments = []models.BillPaymentLog{}
+		}
+
 		c.JSON(200, payments)
 	}
 }

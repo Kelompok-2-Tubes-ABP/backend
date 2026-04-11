@@ -57,6 +57,37 @@ func (s *BillReminderService) CreateBillReminder(bill models.BillReminder) (mode
 	bill.CreatedAt = time.Now()
 	bill.UpdatedAt = time.Now()
 
+	// Automatically calculate next_due_date if not provided
+	if bill.NextDueDate.IsZero() {
+		now := time.Now()
+		day := bill.DayOfMonth
+		if day == 0 {
+			day = 1
+		}
+
+		// Target date for current month
+		dueDate := time.Date(now.Year(), now.Month(), day, 0, 0, 0, 0, time.Local)
+
+		// If the date has passed or is today, go to the next cycle
+		if dueDate.Before(now) || dueDate.Equal(now) {
+			switch bill.BillingCycle {
+			case "daily":
+				dueDate = dueDate.AddDate(0, 0, 1)
+			case "weekly":
+				dueDate = dueDate.AddDate(0, 0, 7)
+			case "monthly":
+				dueDate = dueDate.AddDate(0, 1, 0)
+			case "quarterly":
+				dueDate = dueDate.AddDate(0, 3, 0)
+			case "yearly":
+				dueDate = dueDate.AddDate(1, 0, 0)
+			default:
+				dueDate = dueDate.AddDate(0, 1, 0)
+			}
+		}
+		bill.NextDueDate = dueDate
+	}
+
 	result, err := s.collection.InsertOne(context.TODO(), bill)
 	if err != nil {
 		return models.BillReminder{}, err

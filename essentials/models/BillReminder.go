@@ -71,6 +71,10 @@ func (b *BillReminder) CalculateNextDueDate() time.Time {
 
 	for next.Before(now) || next.Equal(now) {
 		switch b.BillingCycle {
+		case "daily":
+			next = next.AddDate(0, 0, 1)
+		case "weekly":
+			next = next.AddDate(0, 0, 7)
 		case "monthly":
 			next = next.AddDate(0, 1, 0)
 		case "quarterly":
