@@ -15,15 +15,19 @@ import (
 )
 
 type AccountService struct {
-	collection      *mongo.Collection
-	groupCollection *mongo.Collection
+	client                *mongo.Client
+	collection            *mongo.Collection
+	groupCollection       *mongo.Collection
+	transactionCollection *mongo.Collection
 }
 
 func NewAccountService(client *mongo.Client, dbName string) *AccountService {
 	db := client.Database(dbName)
 	return &AccountService{
-		collection:      db.Collection("accounts"),
-		groupCollection: db.Collection("account_groups"),
+		client:                client,
+		collection:            db.Collection("accounts"),
+		groupCollection:       db.Collection("account_groups"),
+		transactionCollection: db.Collection("account_transactions"),
 	}
 }
 
@@ -145,48 +149,54 @@ func (s *AccountService) UpdateBalance(accountID primitive.ObjectID, userID prim
 }
 
 func (s *AccountService) TransferBetweenAccounts(userID primitive.ObjectID, transfer models.AccountTransaction) error {
-	fromAccount, err := s.GetAccount(transfer.FromAccountID, userID)
+	// 1. Transactional Transfer
+	session, err := s.client.StartSession()
 	if err != nil {
-		return errors.New("source account not found")
+		return err
 	}
+	defer session.EndSession(context.TODO())
 
-	toAccount, err := s.GetAccount(transfer.ToAccountID, userID)
-	if err != nil {
-		return errors.New("destination account not found")
-	}
+	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+		// A. Validate accounts and balance
+		var fromAccount models.Account
+		err := s.collection.FindOne(sessCtx, bson.M{"_id": transfer.FromAccountID, "user_id": userID}).Decode(&fromAccount)
+		if err != nil {
+			return nil, errors.New("source account not found")
+		}
 
-	if fromAccount.CurrentBalance < transfer.Amount {
-		return errors.New("insufficient balance")
-	}
+		if fromAccount.CurrentBalance < transfer.Amount {
+			return nil, errors.New("insufficient balance")
+		}
 
-	// Update source account
-	_, err = s.collection.UpdateOne(
-		context.TODO(),
-		bson.M{"_id": fromAccount.ID, "user_id": userID},
-		bson.M{
+		// B. Deduct from source
+		_, err = s.collection.UpdateOne(sessCtx, bson.M{"_id": transfer.FromAccountID}, bson.M{
 			"$inc": bson.M{"current_balance": -transfer.Amount},
 			"$set": bson.M{"updated_at": time.Now()},
-		},
-	)
-	if err != nil {
-		return errors.New("failed to deduct balance from source account")
-	}
+		})
+		if err != nil {
+			return nil, err
+		}
 
-	// Update destination account
-	_, err = s.collection.UpdateOne(
-		context.TODO(),
-		bson.M{"_id": toAccount.ID, "user_id": userID},
-		bson.M{
+		// C. Add to destination
+		res, err := s.collection.UpdateOne(sessCtx, bson.M{"_id": transfer.ToAccountID, "user_id": userID}, bson.M{
 			"$inc": bson.M{"current_balance": transfer.Amount},
 			"$set": bson.M{"updated_at": time.Now()},
-		},
-	)
-	if err != nil {
-		// Caution: Balance was deducted from source but not added to destination yet
-		return errors.New("critical: failed to add balance to destination account")
+		})
+		if err != nil || res.MatchedCount == 0 {
+			return nil, errors.New("failed to update destination account")
+		}
+
+		// D. Record the record
+		transfer.CreatedAt = time.Now()
+		if transfer.TransactionDate.IsZero() {
+			transfer.TransactionDate = time.Now()
+		}
+		_, err = s.transactionCollection.InsertOne(sessCtx, transfer)
+		return nil, err
 	}
 
-	return nil
+	_, err = session.WithTransaction(context.TODO(), callback)
+	return err
 }
 
 func (s *AccountService) DeleteAccount(accountID primitive.ObjectID, userID primitive.ObjectID) error {
@@ -307,4 +317,23 @@ func (s *AccountService) SyncAccount(accountID primitive.ObjectID, userID primit
 		},
 	)
 	return err
+}
+
+func (s *AccountService) GetTransferHistory(userID primitive.ObjectID) ([]models.AccountTransaction, error) {
+	cursor, err := s.transactionCollection.Find(context.TODO(), bson.M{"user_id": userID})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	var transactions []models.AccountTransaction
+	if err := cursor.All(context.TODO(), &transactions); err != nil {
+		return nil, err
+	}
+
+	if transactions == nil {
+		transactions = []models.AccountTransaction{}
+	}
+
+	return transactions, nil
 }

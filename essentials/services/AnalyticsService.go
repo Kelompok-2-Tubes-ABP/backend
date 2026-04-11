@@ -463,3 +463,61 @@ func (s *AnalyticsService) getDebtBreakdown(userOID primitive.ObjectID) ([]model
 
 	return summaries, nil
 }
+
+func (s *AnalyticsService) GetNetWorthDetail(userOID primitive.ObjectID) (map[string]interface{}, error) {
+	// 1. Assets
+	var accountDetails []map[string]interface{}
+	var totalAssets float64
+	if s.accountService != nil {
+		accounts, _ := s.accountService.GetUserAccounts(userOID)
+		for _, acc := range accounts {
+			totalAssets += acc.CurrentBalance
+			accountDetails = append(accountDetails, map[string]interface{}{
+				"name":    acc.Name,
+				"balance": acc.CurrentBalance,
+				"type":    acc.Type,
+			})
+		}
+	}
+
+	var investmentDetails []map[string]interface{}
+	if s.investmentService != nil {
+		investments, _ := s.investmentService.GetUserInvestments(userOID)
+		for _, inv := range investments {
+			totalAssets += inv.TotalValue
+			investmentDetails = append(investmentDetails, map[string]interface{}{
+				"name":   inv.Name,
+				"symbol": inv.Symbol,
+				"value":  inv.TotalValue,
+				"type":   inv.Type,
+			})
+		}
+	}
+
+	// 2. Liabilities
+	var debtDetails []map[string]interface{}
+	var totalLiabilities float64
+	if s.debtService != nil {
+		debts, _ := s.debtService.GetUserDebts(userOID)
+		for _, d := range debts {
+			totalLiabilities += d.CurrentBalance
+			debtDetails = append(debtDetails, map[string]interface{}{
+				"name":      d.Name,
+				"remaining": d.CurrentBalance,
+				"type":      d.Type,
+			})
+		}
+	}
+
+	return map[string]interface{}{
+		"total_assets":      totalAssets,
+		"total_liabilities": totalLiabilities,
+		"net_worth":         totalAssets - totalLiabilities,
+		"assets_breakdown": map[string]interface{}{
+			"accounts":    accountDetails,
+			"investments": investmentDetails,
+		},
+		"liabilities_breakdown": debtDetails,
+		"last_updated":          time.Now(),
+	}, nil
+}

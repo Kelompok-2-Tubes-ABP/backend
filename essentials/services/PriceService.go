@@ -202,7 +202,7 @@ func (s *PriceService) GetStockPrice(symbol string, convertToIDR bool) (float64,
 	if convertToIDR {
 		rate, err := s.currencyService.GetExchangeRate("USD", "IDR")
 		if err != nil {
-			rate.Rate = 15800
+			fmt.Printf("Warning: Failed to get real-time USD/IDR rate: %v. Using fallback.\n", err)
 		}
 
 		return result.C * rate.Rate, nil
@@ -217,15 +217,32 @@ func (s *PriceService) GetStockPrices(symbols []string, convertToIDR bool) (map[
 	}
 
 	prices := make(map[string]float64)
-	var errors []string
+	priceChan := make(chan struct {
+		symbol string
+		price  float64
+		err    error
+	}, len(symbols))
 
+	// Launch parallel requests
 	for _, symbol := range symbols {
-		price, err := s.GetStockPrice(symbol, convertToIDR)
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("%s: %v", symbol, err))
-			continue
+		go func(sym string) {
+			price, err := s.GetStockPrice(sym, convertToIDR)
+			priceChan <- struct {
+				symbol string
+				price  float64
+				err    error
+			}{sym, price, err}
+		}(symbol)
+	}
+
+	var errors []string
+	for i := 0; i < len(symbols); i++ {
+		res := <-priceChan
+		if res.err != nil {
+			errors = append(errors, fmt.Sprintf("%s: %v", res.symbol, res.err))
+		} else {
+			prices[strings.ToUpper(res.symbol)] = res.price
 		}
-		prices[strings.ToUpper(symbol)] = price
 	}
 
 	if len(prices) == 0 && len(errors) > 0 {

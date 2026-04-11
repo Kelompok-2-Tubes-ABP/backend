@@ -18,6 +18,21 @@ func main() {
 	router := gin.Default()
 	client := config.ConnectDB()
 
+	// CORS Middleware
+	router.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, PATCH, DELETE")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	})
+
 	// Email Service
 	emailService := services.NewEmailService(client.Database("mydb"))
 
@@ -160,6 +175,8 @@ func main() {
 
 		// Summary dengan harga real-time
 		investmentProtected.GET("/summary-live", investmentHandler.GetPortfolioSummaryWithLivePrices())
+		investmentProtected.POST("/transaction", investmentHandler.AddTransaction())
+		investmentProtected.GET("/:id/transactions", investmentHandler.GetInvestmentTransactions())
 	}
 
 	// Analytics routes
@@ -169,6 +186,7 @@ func main() {
 		analyticsProtected.GET("/", analyticsHandler.GetFullAnalytics())
 		analyticsProtected.GET("/quick", analyticsHandler.GetQuickStats())
 		analyticsProtected.GET("/goals", analyticsHandler.GetGoalProgress())
+		analyticsProtected.GET("/net-worth", analyticsHandler.GetNetWorthDetail())
 	}
 
 	// Budget routes
@@ -224,6 +242,7 @@ func main() {
 		accountProtected.POST("/:id/sync", accountHandler.SyncAccount())
 		accountProtected.DELETE("/:id", accountHandler.DeleteAccount())
 		accountProtected.POST("/transfer", accountHandler.Transfer())
+		accountProtected.GET("/transfers", accountHandler.GetTransferHistory())
 	}
 
 	// Debt routes

@@ -3,6 +3,7 @@ package handler
 import (
 	"financeapi/essentials/models"
 	"financeapi/essentials/services"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -23,8 +24,15 @@ func (h *InvestmentHandler) CreateInvestment() gin.HandlerFunc {
 			c.JSON(400, gin.H{"error": "Invalid request"})
 			return
 		}
-		userID, _ := c.Get("user_id")
-		inv.UserID = userID.(primitive.ObjectID)
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		inv.UserID = userID
 		created, err := h.service.CreateInvestment(inv)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
@@ -37,8 +45,15 @@ func (h *InvestmentHandler) CreateInvestment() gin.HandlerFunc {
 func (h *InvestmentHandler) GetInvestment() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, _ := primitive.ObjectIDFromHex(c.Param("id"))
-		userID, _ := c.Get("user_id")
-		inv, err := h.service.GetInvestment(id, userID.(primitive.ObjectID))
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		inv, err := h.service.GetInvestment(id, userID)
 		if err != nil {
 			c.JSON(404, gin.H{"error": err.Error()})
 			return
@@ -49,8 +64,14 @@ func (h *InvestmentHandler) GetInvestment() gin.HandlerFunc {
 
 func (h *InvestmentHandler) GetUserInvestments() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		investments, err := h.service.GetUserInvestments(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		investments, err := h.service.GetUserInvestments(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -61,8 +82,14 @@ func (h *InvestmentHandler) GetUserInvestments() gin.HandlerFunc {
 
 func (h *InvestmentHandler) GetPortfolioSummary() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		summary, err := h.service.GetPortfolioSummary(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		summary, err := h.service.GetPortfolioSummary(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -81,8 +108,15 @@ func (h *InvestmentHandler) UpdatePrice() gin.HandlerFunc {
 			c.JSON(400, gin.H{"error": "Invalid request"})
 			return
 		}
-		userID, _ := c.Get("user_id")
-		err := h.service.UpdatePrice(id, userID.(primitive.ObjectID), req.NewPrice)
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		err = h.service.UpdatePrice(id, userID, req.NewPrice)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -94,8 +128,15 @@ func (h *InvestmentHandler) UpdatePrice() gin.HandlerFunc {
 func (h *InvestmentHandler) DeleteInvestment() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, _ := primitive.ObjectIDFromHex(c.Param("id"))
-		userID, _ := c.Get("user_id")
-		err := h.service.DeleteInvestment(id, userID.(primitive.ObjectID))
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		err = h.service.DeleteInvestment(id, userID)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -106,16 +147,16 @@ func (h *InvestmentHandler) DeleteInvestment() gin.HandlerFunc {
 
 func (h *InvestmentHandler) RefreshAllPrices() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-
-		currency := c.DefaultQuery("currency", "idr")
-
-		if currency != "idr" && currency != "usd" && currency != "eur" {
-			c.JSON(400, gin.H{"error": "currency must be idr, usd, or eur"})
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
 			return
 		}
 
-		updatedCount, err := h.service.RefreshAllPrices(userID.(primitive.ObjectID), currency)
+		currency := strings.ToLower(c.DefaultQuery("currency", "idr"))
+
+		updatedCount, err := h.service.RefreshAllPrices(userID, currency)
 		if err != nil {
 			c.JSON(500, gin.H{
 				"success": false,
@@ -142,15 +183,16 @@ func (h *InvestmentHandler) RefreshSinglePrice() gin.HandlerFunc {
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		currency := c.DefaultQuery("currency", "idr")
-
-		if currency != "idr" && currency != "usd" && currency != "eur" {
-			c.JSON(400, gin.H{"error": "currency must be idr, usd, or eur"})
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
 			return
 		}
 
-		newPrice, err := h.service.RefreshSinglePrice(id, userID.(primitive.ObjectID), currency)
+		currency := strings.ToLower(c.DefaultQuery("currency", "idr"))
+
+		newPrice, err := h.service.RefreshSinglePrice(id, userID, currency)
 		if err != nil {
 			c.JSON(500, gin.H{
 				"success": false,
@@ -171,15 +213,16 @@ func (h *InvestmentHandler) RefreshSinglePrice() gin.HandlerFunc {
 
 func (h *InvestmentHandler) GetPortfolioWithLivePrices() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		currency := c.DefaultQuery("currency", "idr")
-
-		if currency != "idr" && currency != "usd" && currency != "eur" {
-			c.JSON(400, gin.H{"error": "currency must be idr, usd, or eur"})
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
 			return
 		}
 
-		investments, err := h.service.GetPortfolioWithLivePrices(userID.(primitive.ObjectID), currency)
+		currency := strings.ToLower(c.DefaultQuery("currency", "idr"))
+
+		investments, err := h.service.GetPortfolioWithLivePrices(userID, currency)
 		if err != nil {
 			c.JSON(500, gin.H{
 				"error":   err.Error(),
@@ -188,7 +231,7 @@ func (h *InvestmentHandler) GetPortfolioWithLivePrices() gin.HandlerFunc {
 			return
 		}
 
-		summary, err := h.service.GetPortfolioSummary(userID.(primitive.ObjectID))
+		summary, err := h.service.GetPortfolioSummary(userID)
 		if err != nil {
 			summary = nil
 		}
@@ -204,15 +247,16 @@ func (h *InvestmentHandler) GetPortfolioWithLivePrices() gin.HandlerFunc {
 
 func (h *InvestmentHandler) GetPortfolioSummaryWithLivePrices() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		currency := c.DefaultQuery("currency", "idr")
-
-		if currency != "idr" && currency != "usd" && currency != "eur" {
-			c.JSON(400, gin.H{"error": "currency must be idr, usd, or eur"})
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
 			return
 		}
 
-		summary, err := h.service.GetPortfolioSummaryWithLivePrices(userID.(primitive.ObjectID), currency)
+		currency := strings.ToLower(c.DefaultQuery("currency", "idr"))
+
+		summary, err := h.service.GetPortfolioSummaryWithLivePrices(userID, currency)
 		if err != nil {
 			c.JSON(500, gin.H{
 				"error":   err.Error(),
@@ -225,5 +269,57 @@ func (h *InvestmentHandler) GetPortfolioSummaryWithLivePrices() gin.HandlerFunc 
 			"summary":  summary,
 			"currency": currency,
 		})
+	}
+}
+
+func (h *InvestmentHandler) AddTransaction() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var tx models.InvestmentTransaction
+		if err := c.ShouldBindJSON(&tx); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		tx.UserID = userID
+
+		created, err := h.service.AddTransaction(tx)
+		if err != nil {
+			c.JSON(400, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(201, created)
+	}
+}
+
+func (h *InvestmentHandler) GetInvestmentTransactions() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		invID, err := primitive.ObjectIDFromHex(c.Param("id"))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid investment ID"})
+			return
+		}
+
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		transactions, err := h.service.GetInvestmentTransactions(invID, userID)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, transactions)
 	}
 }

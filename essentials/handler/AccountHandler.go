@@ -26,8 +26,13 @@ func (h *AccountHandler) CreateAccount() gin.HandlerFunc {
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		account.UserID = userID.(primitive.ObjectID)
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		account.UserID = userID
 
 		createdAccount, err := h.service.CreateAccount(account)
 		if err != nil {
@@ -47,8 +52,14 @@ func (h *AccountHandler) GetAccount() gin.HandlerFunc {
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		account, err := h.service.GetAccount(accountID, userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		account, err := h.service.GetAccount(accountID, userID)
 		if err != nil {
 			c.JSON(404, gin.H{"error": err.Error()})
 			return
@@ -60,11 +71,21 @@ func (h *AccountHandler) GetAccount() gin.HandlerFunc {
 
 func (h *AccountHandler) GetUserAccounts() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		accounts, err := h.service.GetUserAccounts(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		accounts, err := h.service.GetUserAccounts(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
+		}
+
+		if accounts == nil {
+			accounts = []models.Account{}
 		}
 
 		c.JSON(200, accounts)
@@ -74,11 +95,21 @@ func (h *AccountHandler) GetUserAccounts() gin.HandlerFunc {
 func (h *AccountHandler) GetAccountsByType() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		accountType := models.AccountType(c.Param("type"))
-		userID, _ := c.Get("user_id")
-		accounts, err := h.service.GetUserAccountsByType(userID.(primitive.ObjectID), accountType)
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		accounts, err := h.service.GetUserAccountsByType(userID, accountType)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
+		}
+
+		if accounts == nil {
+			accounts = []models.Account{}
 		}
 
 		c.JSON(200, accounts)
@@ -99,8 +130,14 @@ func (h *AccountHandler) UpdateAccount() gin.HandlerFunc {
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		account, err := h.service.UpdateAccount(accountID, userID.(primitive.ObjectID), updates)
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		account, err := h.service.UpdateAccount(accountID, userID, updates)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -126,8 +163,14 @@ func (h *AccountHandler) UpdateBalance() gin.HandlerFunc {
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		err = h.service.UpdateBalance(accountID, userID.(primitive.ObjectID), req.NewBalance)
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		err = h.service.UpdateBalance(accountID, userID, req.NewBalance)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -145,11 +188,16 @@ func (h *AccountHandler) Transfer() gin.HandlerFunc {
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		transfer.UserID = userID.(primitive.ObjectID)
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		transfer.UserID = userID
 		transfer.TransactionDate = time.Now()
 
-		err := h.service.TransferBetweenAccounts(userID.(primitive.ObjectID), transfer)
+		err = h.service.TransferBetweenAccounts(userID, transfer)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -167,8 +215,14 @@ func (h *AccountHandler) DeleteAccount() gin.HandlerFunc {
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		err = h.service.DeleteAccount(accountID, userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		err = h.service.DeleteAccount(accountID, userID)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -180,8 +234,14 @@ func (h *AccountHandler) DeleteAccount() gin.HandlerFunc {
 
 func (h *AccountHandler) GetAccountSummary() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		summary, err := h.service.GetAccountSummary(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		summary, err := h.service.GetAccountSummary(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -193,11 +253,21 @@ func (h *AccountHandler) GetAccountSummary() gin.HandlerFunc {
 
 func (h *AccountHandler) GetAccountGroups() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		groups, err := h.service.GetAccountGroups(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		groups, err := h.service.GetAccountGroups(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
+		}
+
+		if groups == nil {
+			groups = []models.AccountGroup{}
 		}
 
 		c.JSON(200, groups)
@@ -212,8 +282,13 @@ func (h *AccountHandler) CreateAccountGroup() gin.HandlerFunc {
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		group.UserID = userID.(primitive.ObjectID)
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		group.UserID = userID
 
 		createdGroup, err := h.service.CreateAccountGroup(group)
 		if err != nil {
@@ -233,13 +308,38 @@ func (h *AccountHandler) SyncAccount() gin.HandlerFunc {
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		err = h.service.SyncAccount(accountID, userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		err = h.service.SyncAccount(accountID, userID)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
 
 		c.JSON(200, gin.H{"message": "Account synced successfully"})
+	}
+}
+
+func (h *AccountHandler) GetTransferHistory() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		transactions, err := h.service.GetTransferHistory(userID)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, transactions)
 	}
 }

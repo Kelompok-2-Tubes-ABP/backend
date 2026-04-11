@@ -45,21 +45,30 @@ func (h *RecurringTransactionHandler) GetRecurringTransaction() gin.HandlerFunc 
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		recurring, err := h.service.GetRecurringTransaction(id, userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
 		if err != nil {
-			c.JSON(404, gin.H{"error": err.Error()})
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
 			return
 		}
-
+		recurring, err := h.service.GetRecurringTransaction(id, userID)
+		if err != nil {
+			c.JSON(404, gin.H{"error": "Recurring transaction not found"})
+			return
+		}
 		c.JSON(200, recurring)
 	}
 }
 
 func (h *RecurringTransactionHandler) GetUserRecurringTransactions() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		recurring, err := h.service.GetUserRecurringTransactions(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		recurring, err := h.service.GetUserRecurringTransactions(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -71,8 +80,13 @@ func (h *RecurringTransactionHandler) GetUserRecurringTransactions() gin.Handler
 
 func (h *RecurringTransactionHandler) GetActiveRecurringTransactions() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		recurring, err := h.service.GetActiveRecurringTransactions(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		recurring, err := h.service.GetActiveRecurringTransactions(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -84,8 +98,13 @@ func (h *RecurringTransactionHandler) GetActiveRecurringTransactions() gin.Handl
 
 func (h *RecurringTransactionHandler) GetDueRecurringTransactions() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		recurring, err := h.service.GetDueRecurringTransactions(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		recurring, err := h.service.GetDueRecurringTransactions(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -109,8 +128,13 @@ func (h *RecurringTransactionHandler) UpdateRecurringTransaction() gin.HandlerFu
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		recurring, err := h.service.UpdateRecurringTransaction(id, userID.(primitive.ObjectID), updates)
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		recurring, err := h.service.UpdateRecurringTransaction(id, userID, updates)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -128,8 +152,13 @@ func (h *RecurringTransactionHandler) DeleteRecurringTransaction() gin.HandlerFu
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		err = h.service.DeleteRecurringTransaction(id, userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		err = h.service.DeleteRecurringTransaction(id, userID)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -141,8 +170,13 @@ func (h *RecurringTransactionHandler) DeleteRecurringTransaction() gin.HandlerFu
 
 func (h *RecurringTransactionHandler) ProcessDueTransactions() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		generated, err := h.service.ProcessDueTransactions(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		generated, err := h.service.ProcessDueTransactions(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -163,8 +197,13 @@ func (h *RecurringTransactionHandler) SkipNextRun() gin.HandlerFunc {
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		err = h.service.SkipNextRun(id, userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		err = h.service.SkipNextRun(id, userID)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -182,8 +221,13 @@ func (h *RecurringTransactionHandler) PauseRecurringTransaction() gin.HandlerFun
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		err = h.service.PauseRecurringTransaction(id, userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		err = h.service.PauseRecurringTransaction(id, userID)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -201,8 +245,13 @@ func (h *RecurringTransactionHandler) ResumeRecurringTransaction() gin.HandlerFu
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		err = h.service.ResumeRecurringTransaction(id, userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		err = h.service.ResumeRecurringTransaction(id, userID)
 		if err != nil {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
@@ -220,8 +269,13 @@ func (h *RecurringTransactionHandler) GetGeneratedTransactions() gin.HandlerFunc
 			return
 		}
 
-		userID, _ := c.Get("user_id")
-		generated, err := h.service.GetGeneratedTransactions(id, userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		generated, err := h.service.GetGeneratedTransactions(id, userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -233,8 +287,13 @@ func (h *RecurringTransactionHandler) GetGeneratedTransactions() gin.HandlerFunc
 
 func (h *RecurringTransactionHandler) GetRecurringSummary() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		summary, err := h.service.GetRecurringSummary(userID.(primitive.ObjectID))
+		userIDStr, _ := c.Get("user_id")
+		userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+		summary, err := h.service.GetRecurringSummary(userID)
 		if err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return

@@ -2,7 +2,11 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"os"
 	"time"
 
 	"financeapi/essentials/models"
@@ -17,6 +21,8 @@ type CurrencyService struct {
 	currencyCol     *mongo.Collection
 	rateCol         *mongo.Collection
 	userCurrencyCol *mongo.Collection
+	apiKey          string
+	apiURL          string
 }
 
 func NewCurrencyService(client *mongo.Client, dbName string) *CurrencyService {
@@ -25,6 +31,8 @@ func NewCurrencyService(client *mongo.Client, dbName string) *CurrencyService {
 		currencyCol:     db.Collection("currencies"),
 		rateCol:         db.Collection("exchange_rates"),
 		userCurrencyCol: db.Collection("user_currencies"),
+		apiKey:          os.Getenv("EXCHANGE_API_KEY"),
+		apiURL:          "https://v6.exchangerate-api.com/v6",
 	}
 }
 
@@ -75,6 +83,7 @@ func (s *CurrencyService) GetCurrency(code string) (models.Currency, error) {
 
 func (s *CurrencyService) GetExchangeRate(fromCurrency, toCurrency string) (models.ExchangeRate, error) {
 	var rate models.ExchangeRate
+	// 1. Cek di Database (Cache)
 	err := s.rateCol.FindOne(context.TODO(), bson.M{
 		"from_currency":   fromCurrency,
 		"to_currency":     toCurrency,
@@ -85,6 +94,18 @@ func (s *CurrencyService) GetExchangeRate(fromCurrency, toCurrency string) (mode
 		return rate, nil
 	}
 
+	// 2. Jika tidak ada/expired, coba ambil dari API
+	if s.apiKey != "" {
+		newRate, err := s.FetchExchangeRateFromAPI(fromCurrency, toCurrency)
+		if err == nil {
+			// Simpan ke Database untuk cache 24 jam ke depan
+			newRate.ExpirationTime = time.Now().Add(24 * time.Hour)
+			s.SetExchangeRate(newRate)
+			return newRate, nil
+		}
+	}
+
+	// 3. Fallback ke Default Rate jika API gagal
 	return models.ExchangeRate{
 		FromCurrency:   fromCurrency,
 		ToCurrency:     toCurrency,
@@ -260,4 +281,40 @@ func (s *CurrencyService) GetAllRatesForCurrency(currencyCode string) ([]models.
 	}
 
 	return rates, nil
+}
+
+func (s *CurrencyService) FetchExchangeRateFromAPI(from, to string) (models.ExchangeRate, error) {
+	url := fmt.Sprintf("%s/%s/pair/%s/%s", s.apiURL, s.apiKey, from, to)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return models.ExchangeRate{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return models.ExchangeRate{}, fmt.Errorf("API error: status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Result         string  `json:"result"`
+		ConversionRate float64 `json:"conversion_rate"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return models.ExchangeRate{}, err
+	}
+
+	if result.Result != "success" {
+		return models.ExchangeRate{}, fmt.Errorf("API error: %s", result.Result)
+	}
+
+	return models.ExchangeRate{
+		FromCurrency: from,
+		ToCurrency:   to,
+		Rate:         result.ConversionRate,
+		Source:       "exchangerate-api",
+		LastUpdated:  time.Now(),
+	}, nil
 }

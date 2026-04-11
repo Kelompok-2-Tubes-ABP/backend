@@ -16,13 +16,16 @@ import (
 )
 
 type InvestmentService struct {
-	collection   *mongo.Collection
-	priceService *PriceService
+	collection     *mongo.Collection
+	transactionCol *mongo.Collection
+	priceService   *PriceService
 }
 
 func NewInvestmentService(client *mongo.Client, dbName string) *InvestmentService {
+	db := client.Database(dbName)
 	return &InvestmentService{
-		collection: client.Database(dbName).Collection("investments"),
+		collection:     db.Collection("investments"),
+		transactionCol: db.Collection("investment_transactions"),
 	}
 }
 
@@ -276,4 +279,73 @@ func (s *InvestmentService) GetPortfolioSummaryWithLivePrices(userID primitive.O
 	}
 
 	return s.GetPortfolioSummary(userID)
+}
+func (s *InvestmentService) AddTransaction(tx models.InvestmentTransaction) (models.InvestmentTransaction, error) {
+	// 1. Get the investment
+	inv, err := s.GetInvestment(tx.InvestmentID, tx.UserID)
+	if err != nil {
+		return models.InvestmentTransaction{}, err
+	}
+
+	tx.CreatedAt = time.Now()
+	if tx.Date.IsZero() {
+		tx.Date = time.Now()
+	}
+
+	// 2. Adjust Quantity and Average Cost based on type
+	switch strings.ToLower(tx.Type) {
+	case "buy":
+		totalCostOld := inv.Quantity * inv.AverageCost
+		totalCostNew := tx.Quantity * tx.Price
+		inv.Quantity += tx.Quantity
+		inv.AverageCost = (totalCostOld + totalCostNew) / inv.Quantity
+	case "sell":
+		if tx.Quantity > inv.Quantity {
+			return models.InvestmentTransaction{}, errors.New("insufficient quantity to sell")
+		}
+		inv.Quantity -= tx.Quantity
+		// Average Cost doesn't change when selling
+	case "dividend":
+		// Dividend usually doesn't change quantity/avg cost of units,
+		// but it contributes to overall return. Realistically, some people
+		// like to subtract it from average cost, but typically it's just a cash inflow.
+	default:
+		return models.InvestmentTransaction{}, fmt.Errorf("invalid transaction type: %s", tx.Type)
+	}
+
+	// 3. Update Investment values
+	inv.CalculateValues()
+	inv.UpdatedAt = time.Now()
+
+	// 4. Save Transaction
+	result, err := s.transactionCol.InsertOne(context.TODO(), tx)
+	if err != nil {
+		return models.InvestmentTransaction{}, err
+	}
+	tx.ID = result.InsertedID.(primitive.ObjectID)
+
+	// 5. Update Investment in DB
+	_, err = s.collection.ReplaceOne(context.TODO(), bson.M{"_id": inv.ID}, inv)
+	if err != nil {
+		return tx, fmt.Errorf("transaction saved but failed to update investment: %w", err)
+	}
+
+	return tx, nil
+}
+
+func (s *InvestmentService) GetInvestmentTransactions(investmentID primitive.ObjectID, userID primitive.ObjectID) ([]models.InvestmentTransaction, error) {
+	cursor, err := s.transactionCol.Find(context.TODO(), bson.M{
+		"investment_id": investmentID,
+		"user_id":       userID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	var transactions []models.InvestmentTransaction
+	if err := cursor.All(context.TODO(), &transactions); err != nil {
+		return nil, err
+	}
+	return transactions, nil
 }
