@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -61,6 +62,8 @@ type Debt struct {
 	TotalPaid         float64 `json:"total_paid" bson:"total_paid"`
 	TotalInterest     float64 `json:"total_interest" bson:"total_interest"`
 	RemainingPayments int     `json:"remaining_payments" bson:"remaining_payments"`
+	TenorMonths       int     `json:"tenor_months" bson:"tenor_months"`     // Total duration in months
+	IsRecommended     bool    `json:"is_recommended" bson:"is_recommended"` // Is this debt within healthy limits?
 
 	// Metadata
 	AccountID primitive.ObjectID `json:"account_id,omitempty" bson:"account_id,omitempty"` // Linked account
@@ -112,6 +115,24 @@ func (d *Debt) CalculateTotalInterest() float64 {
 	}
 
 	return totalInterest
+}
+
+// CheckDebtHealth checks if the debt installment is within user's capability
+// Usually debt should not exceed 30% of monthly income
+func (d *Debt) CheckDebtHealth(monthlyIncome float64) (bool, string) {
+	if monthlyIncome <= 0 {
+		return true, "Income data not available for health check"
+	}
+
+	debtRatio := (d.PaymentAmount / monthlyIncome) * 100
+	if debtRatio > 35 {
+		return false, fmt.Sprintf("Bahaya! Cicilan ini memakan %.1f%% pendapatan kamu. Batas aman adalah 30-35%%.", debtRatio)
+	}
+	if debtRatio > 30 {
+		return true, fmt.Sprintf("Waspada. Cicilan kamu sudah mencapai %.1f%% pendapatan. Jangan nambah hutang lagi ya!", debtRatio)
+	}
+
+	return true, "Cicilan ini aman dan sesuai dengan kemampuan keuangan kamu."
 }
 
 // DebtPayment represents a debt payment

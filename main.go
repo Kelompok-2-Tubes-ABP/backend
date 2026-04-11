@@ -254,7 +254,9 @@ func main() {
 		debtProtected.GET("/", debtHandler.GetUserDebts())
 		debtProtected.GET("/summary", debtHandler.GetDebtSummary())
 		debtProtected.GET("/:id", debtHandler.GetDebt())
+		debtProtected.GET("/:id/history", debtHandler.GetPaymentHistory())
 		debtProtected.POST("/:id/pay", debtHandler.MakePayment())
+		debtProtected.DELETE("/:id", debtHandler.DeleteDebt())
 	}
 
 	// Recurring Transaction routes
