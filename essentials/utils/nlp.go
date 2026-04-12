@@ -82,20 +82,26 @@ func ExtractSavingsGoalName(message string) string {
 // ExtractExpenseCategory extracts the expense category from the message
 func ExtractExpenseCategory(message string) string {
 	msg := strings.ToLower(message)
-	categoryMap := map[string]string{
-		"makan": "food", "food": "food", "lunch": "food", "dinner": "food", "breakfast": "food",
-		"ojek": "transport", "taxi": "transport", "grab": "transport", "gojek": "transport", "bensin": "transport", "bbm": "transport", "parkir": "transport", "tol": "transport", "transport": "transport", "angkot": "transport", "bus": "transport", "kereta": "transport",
-		"belanja": "shopping", "beli": "shopping", "shopping": "shopping", "buy": "shopping", "pakaian": "shopping", "baju": "shopping", "sepatu": "shopping", "tas": "shopping",
-		"nonton": "entertainment", "film": "entertainment", "movie": "entertainment", "bioskop": "entertainment", "konser": "entertainment", "game": "entertainment", "streaming": "entertainment", "netflix": "entertainment",
-		"listrik": "bills", "air": "bills", "internet": "bills", "wifi": "bills", "pulsa": "bills", "token": "bills", "tagihan": "bills", "bill": "bills",
-		"obat": "health", "dokter": "health", "rumah sakit": "health", "rs": "health", "apotek": "health", "medical": "health",
-		"buku": "education", "kursus": "education", "sekolah": "education", "kuliah": "education", "les": "education", "study": "education", "pelajaran": "education",
-		"other": "other", "lain": "other", "lainnya": "other",
+	categories := []struct {
+		category string
+		keywords []string
+	}{
+		{"food", []string{"makan", "food", "lunch", "dinner", "breakfast"}},
+		{"transport", []string{"ojek", "taxi", "grab", "gojek", "bensin", "bbm", "parkir", "tol", "transport", "angkot", "bus", "kereta"}},
+		{"entertainment", []string{"nonton", "film", "movie", "bioskop", "konser", "game", "streaming", "netflix"}},
+		{"bills", []string{"listrik", "air", "internet", "wifi", "pulsa", "token", "tagihan", "bill"}},
+		{"health", []string{"obat", "dokter", "rumah sakit", "rs", "apotek", "medical"}},
+		{"education", []string{"buku", "kursus", "sekolah", "kuliah", "les", "study", "pelajaran"}},
+		{"shopping", []string{"belanja", "pakaian", "baju", "sepatu", "tas", "beli", "shopping", "buy"}}, // 'beli' put here as fallback
+		{"other", []string{"other", "lain", "lainnya"}},
 	}
 
-	for keyword, category := range categoryMap {
-		if strings.Contains(msg, keyword) {
-			return category
+	for _, c := range categories {
+		for _, kw := range c.keywords {
+			// Using word boundaries to avoid partial matches would be better, but simple Contains is used originally
+			if strings.Contains(msg, kw) {
+				return c.category
+			}
 		}
 	}
 	return ""
