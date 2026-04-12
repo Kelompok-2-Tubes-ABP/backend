@@ -55,7 +55,7 @@ func (s *SpendingInsightService) SetBillReminderService(brs *BillReminderService
 }
 
 func (s *SpendingInsightService) GetUserInsights(userID primitive.ObjectID, limit int64) ([]models.SpendingInsight, error) {
-	opts := mongoOpts.Find().SetSort(bson.M{"priority": 1, "created_at": -1}).SetLimit(limit)
+	opts := mongoOpts.Find().SetSort(bson.D{{Key: "priority", Value: 1}, {Key: "created_at", Value: -1}}).SetLimit(limit)
 
 	cursor, err := s.collection.Find(context.TODO(), bson.M{
 		"user_id":    userID,

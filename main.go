@@ -299,6 +299,7 @@ func main() {
 	insightHandler := handler.NewSpendingInsightHandler(spendingInsightService)
 	insightProtected := router.Group("/insights", authh.AuthMiddleware())
 	{
+		insightProtected.POST("/create", insightHandler.CreateInsight())
 		insightProtected.GET("/", insightHandler.GetInsights())
 		insightProtected.GET("/health", insightHandler.GetHealthScore())
 		insightProtected.POST("/:id/read", insightHandler.MarkAsRead())
