@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"financeapi/essentials/models"
+	"financeapi/essentials/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -314,7 +315,7 @@ func (s *ChatbotService) handleAddTransaction(userID, message string) string {
 	msg := strings.ToLower(message)
 
 	// Parse amount
-	amount := parseIndonesianAmount(message)
+	amount := utils.ParseIndonesianAmount(message)
 	if amount <= 0 {
 		return "Maaf, saya tidak dapat menentukan jumlah transaksi. Contoh: 'tambah pengeluaran 50000 untuk makan'"
 	}
@@ -330,14 +331,14 @@ func (s *ChatbotService) handleAddTransaction(userID, message string) string {
 		category = "income"
 	} else {
 		// Determine specific expense category
-		specificCategory := extractExpenseCategory(msg)
+		specificCategory := utils.ExtractExpenseCategory(msg)
 		if specificCategory != "" {
 			category = specificCategory
 		}
 	}
 
 	// Extract description/note from message
-	description := extractTransactionDescription(message)
+	description := utils.ExtractTransactionDescription(message)
 
 	// Create transaction
 	transaction := models.Transaction{
@@ -432,13 +433,13 @@ func (s *ChatbotService) handleSavings(userID, message string) string {
 // handleAddSavingsContribution handles adding money to a savings goal
 func (s *ChatbotService) handleAddSavingsContribution(userID, message string) string {
 	// Parse amount from message (e.g., "1 juta" -> 1000000, "500 ribu" -> 500000)
-	amount := parseIndonesianAmount(message)
+	amount := utils.ParseIndonesianAmount(message)
 	if amount <= 0 {
 		return "Maaf, saya tidak dapat menentukan jumlah yang ingin ditabung. Contoh: 'tambah tabungan jepang 1 juta'"
 	}
 
 	// Extract goal name from message
-	goalName := extractSavingsGoalName(message)
+	goalName := utils.ExtractSavingsGoalName(message)
 	msgLower := strings.ToLower(message)
 
 	// Get user's savings goals
@@ -520,148 +521,6 @@ func (s *ChatbotService) handleAddSavingsContribution(userID, message string) st
 
 	return fmt.Sprintf("✅ Berhasil menambahkan Rp%.0f ke tabungan '%s'!\n\n💰 Total: Rp%.0f / Rp%.0f (%.0f%%)",
 		amount, targetGoal.Name, newAmount, targetGoal.TargetAmount, newProgress)
-}
-
-// parseIndonesianAmount converts Indonesian number format to float
-// Examples: "1 juta" -> 1000000, "500 ribu" -> 500000, "100rb" -> 100000, "1000000" -> 1000000
-func parseIndonesianAmount(message string) float64 {
-	msg := strings.ToLower(message)
-
-	// Pattern for "X juta" or "X million" - CHECK THIS FIRST
-	re := regexp.MustCompile(`(\d+(?:\.\d+)?)\s*(?:juta|jt|million|m)`)
-	matches := re.FindStringSubmatch(msg)
-	if matches != nil {
-		if val, err := strconv.ParseFloat(matches[1], 64); err == nil {
-			return val * 1000000
-		}
-	}
-
-	// Pattern for "X ribu" or "X rb" or "X thousand"
-	re = regexp.MustCompile(`(\d+(?:\.\d+)?)\s*(?:ribu|rb|thousand|k)`)
-	matches = re.FindStringSubmatch(msg)
-	if matches != nil {
-		if val, err := strconv.ParseFloat(matches[1], 64); err == nil {
-			return val * 1000
-		}
-	}
-
-	// Pattern for plain numbers last (e.g., "1000000")
-	re = regexp.MustCompile(`(\d+)`)
-	matches = re.FindStringSubmatch(msg)
-	if matches != nil {
-		if val, err := strconv.ParseFloat(matches[1], 64); err == nil {
-			return val
-		}
-	}
-
-	return 0
-}
-
-// extractSavingsGoalName extracts the savings goal name from the message
-func extractSavingsGoalName(message string) string {
-	msg := strings.ToLower(message)
-
-	// Common patterns: look for savings goal names in the message
-	// Try to find existing goal names first
-	patterns := []string{
-		`tabungan\s+(.+?)(?:\s+\d+|$)`,
-		`nabung\s+(.+?)(?:\s+\d+|$)`,
-		`target\s+(.+?)(?:\s+\d+|$)`,
-		`untuk\s+(.+?)(?:\s+\d+|$)`,
-		`buat\s+(.+?)(?:\s+\d+|$)`,
-		// For "liburan ke milan" pattern - capture destination
-		`liburan\s+ke\s+(\w+)`,
-		// Also try to find multi-word names
-		`(?:ke|jepang|milan|liburan|mobil|bayar|hp|laptop)\s*(\w+)`,
-	}
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		matches := re.FindStringSubmatch(msg)
-		if matches != nil && len(matches) > 1 {
-			name := strings.TrimSpace(matches[1])
-			// Remove common suffixes
-			name = strings.TrimSuffix(name, "nya")
-			name = strings.TrimSuffix(name, "p") // remove 'p' from "jepang p"
-			if len(name) > 1 {
-				return name
-			}
-		}
-	}
-
-	// Fallback: look for known goal keywords
-	knownGoals := []string{"jepang", "milan", "liburan", "mobil", "hp", "laptop", "rumah"}
-	for _, goal := range knownGoals {
-		if strings.Contains(msg, goal) {
-			return goal
-		}
-	}
-
-	// If no pattern matches, return empty
-	return ""
-}
-
-// extractExpenseCategory extracts the expense category from the message
-func extractExpenseCategory(message string) string {
-	msg := strings.ToLower(message)
-
-	// Map of keywords to categories
-	categoryMap := map[string]string{
-		// Food
-		"makan": "food", "food": "food", "lunch": "food", "dinner": "food", "breakfast": "food", "s breakfast": "food", "s lunch": "food", "s dinner": "food",
-		// Transport
-		"ojek": "transport", "taxi": "transport", "grab": "transport", "gojek": "transport", "bensin": "transport", "bbm": "transport", "parkir": "transport", "tol": "transport", "transport": "transport", "angkot": "transport", "bus": "transport", "kereta": "transport", "b起飞": "transport",
-		// Shopping
-		"belanja": "shopping", "beli": "shopping", "shopping": "shopping", "buy": "shopping", "pakaian": "shopping", "baju": "shopping", "sepatu": "shopping", "tas": "shopping",
-		// Entertainment
-		"nonton": "entertainment", "film": "entertainment", "movie": "entertainment", "bioskop": "entertainment", "konser": "entertainment", "game": "entertainment", "streaming": "entertainment", "netflix": "entertainment",
-		// Bills
-		"listrik": "bills", "air": "bills", "internet": "bills", "wifi": "bills", "pulsa": "bills", "token": "bills", "tagihan": "bills", "bill": "bills",
-		// Health
-		"obat": "health", "dokter": "health", "rumah sakit": "health", "rs": "health", "apotek": "health", "medical": "health",
-		// Education
-		"buku": "education", "kursus": "education", "sekolah": "education", "kuliah": "education", "les": "education", "study": "education", "pelajaran": "education",
-		// Other
-		"other": "other", "lain": "other", "lainnya": "other",
-	}
-
-	for keyword, category := range categoryMap {
-		if strings.Contains(msg, keyword) {
-			return category
-		}
-	}
-
-	return ""
-}
-
-// extractTransactionDescription extracts description from transaction message
-func extractTransactionDescription(message string) string {
-	msg := strings.ToLower(message)
-
-	// Common patterns: "untuk [desc]" or "ke [desc]" or "desc: [desc]"
-	patterns := []string{
-		`untuk\s+(.+)`,
-		`ke\s+(.+)`,
-		`desc\s*:\s*(.+)`,
-		`catatan\s*:\s*(.+)`,
-		`note\s*:\s*(.+)`,
-	}
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		matches := re.FindStringSubmatch(msg)
-		if matches != nil && len(matches) > 1 {
-			desc := matches[1]
-			// Clean up - take first few words if too long
-			words := strings.Fields(desc)
-			if len(words) > 5 {
-				desc = strings.Join(words[:5], " ") + "..."
-			}
-			return desc
-		}
-	}
-
-	return "Via Chatbot"
 }
 
 // listSavingsGoals returns a formatted list of savings goals
@@ -1110,7 +969,7 @@ func (s *ChatbotService) handleBills(userID, message string) string {
 
 	// 1. Detect creation intent
 	creationKeywords := []string{"ada", "tambah", "catat", "buat", "punya", "baru", "jatuh tempo"}
-	amount := parseIndonesianAmount(message)
+	amount := utils.ParseIndonesianAmount(message)
 	if containsAny(msg, creationKeywords) && amount > 0 {
 		return s.handleAddBill(userID, message)
 	}
@@ -1198,13 +1057,13 @@ func (s *ChatbotService) handleAddBill(userID, message string) string {
 	msg := strings.ToLower(message)
 	userOID, _ := primitive.ObjectIDFromHex(userID)
 
-	amount := parseIndonesianAmount(message)
-	name := extractBillNameFromMessage(msg)
+	amount := utils.ParseIndonesianAmount(message)
+	name := utils.ExtractBillNameFromMessage(msg)
 	if name == "" || name == "tagihan" || name == "bill" {
 		name = "Tagihan Baru"
 	}
 
-	category := extractExpenseCategory(msg)
+	category := utils.ExtractExpenseCategory(msg)
 	if category == "" {
 		category = "other"
 	}
@@ -1231,21 +1090,6 @@ func (s *ChatbotService) handleAddBill(userID, message string) string {
 	res += fmt.Sprintf("\nSaya akan ingatkan kamu sebelum jatuh tempo ya!")
 
 	return res
-}
-
-func extractBillNameFromMessage(msg string) string {
-	removables := []string{"tagihan", "bill", "ada", "tambah", "catat", "buat", "punya", "baru", "jatuh", "tempo", "dalam", "bulan", "minggu", "hari", "sebesar", "nominalny", "nominal", "rp", "juta", "ribu", "rb", "jt"}
-	cleaned := msg
-	for _, r := range removables {
-		cleaned = strings.ReplaceAll(cleaned, r, "")
-	}
-	re := regexp.MustCompile(`\d+`)
-	cleaned = re.ReplaceAllString(cleaned, "")
-	words := strings.Fields(cleaned)
-	if len(words) > 0 {
-		return strings.Join(words, " ")
-	}
-	return ""
 }
 
 // handleRecurring handles recurring transactions
@@ -1300,7 +1144,7 @@ func (s *ChatbotService) handleDebt(userID, message string) string {
 
 	// 2. Detect creation intent (e.g., "aku ada hutang...", "tambah cicilan...")
 	creationKeywords := []string{"ada", "tambah", "catat", "buat", "punya", "mempunyai", "baru"}
-	amount := parseIndonesianAmount(message)
+	amount := utils.ParseIndonesianAmount(message)
 	if (containsAny(msg, creationKeywords) && amount > 0) || (amount > 0 && containsAny(msg, []string{"bunga", "tenor", "bulan"})) {
 		return s.handleAddDebt(userID, message)
 	}
@@ -1331,18 +1175,18 @@ func (s *ChatbotService) handleAddDebt(userID, message string) string {
 	msg := strings.ToLower(message)
 	userOID, _ := primitive.ObjectIDFromHex(userID)
 
-	amount := parseIndonesianAmount(message)
+	amount := utils.ParseIndonesianAmount(message)
 
 	// Create a "name-only" string by removing the amount part
-	amountStr := extractAmountString(msg)
+	amountStr := utils.ExtractAmountString(msg)
 	msgWithoutAmount := msg
 	if amountStr != "" {
 		msgWithoutAmount = strings.Replace(msg, amountStr, "", 1)
 	}
 
-	interest := extractInterestRate(msg)
-	tenor := extractTenor(msg)
-	name := extractDebtNameFromMessage(msgWithoutAmount)
+	interest := utils.ExtractInterestRate(msg)
+	tenor := utils.ExtractTenor(msg)
+	name := utils.ExtractDebtNameFromMessage(msgWithoutAmount)
 	if name == "" || name == "credit" || name == "kredit" || name == "tagihan" {
 		name = "Kredit Baru"
 	}
@@ -1385,59 +1229,27 @@ func (s *ChatbotService) handleAddDebt(userID, message string) string {
 	return res
 }
 
-func extractInterestRate(msg string) float64 {
-	// Support: "1.2%", "1.2 persen", "1.2 percent"
-	re := regexp.MustCompile(`(\d+(?:\.\d+)?)\s*(?:%|persen|percent)`)
-	matches := re.FindStringSubmatch(msg)
-	if len(matches) > 1 {
-		val, _ := strconv.ParseFloat(matches[1], 64)
-		return val
-	}
-	return 0
-}
-
-func extractTenor(msg string) int {
-	// Support: "12 bulan", "1 tahun" (auto x12), "tenor 24"
-
-	// Check for years first
-	reYear := regexp.MustCompile(`(\d+)\s*(?:tahun|year|thn|yr)`)
-	matchesYear := reYear.FindStringSubmatch(msg)
-	if len(matchesYear) > 1 {
-		val, _ := strconv.Atoi(matchesYear[1])
-		return val * 12
-	}
-
-	// Check for months
-	reMonth := regexp.MustCompile(`(\d+)\s*(?:bulan|month|bln|mo|tenor)`)
-	matchesMonth := reMonth.FindStringSubmatch(msg)
-	if len(matchesMonth) > 1 {
-		val, _ := strconv.Atoi(matchesMonth[1])
-		return val
-	}
-	return 0
-}
-
 func (s *ChatbotService) handleDebtPayment(userID, message string) string {
 	userOID, _ := primitive.ObjectIDFromHex(userID)
 	msg := strings.ToLower(message)
 
 	// 1. Parse amount and create a version of message without that amount
-	amount := parseIndonesianAmount(message)
+	amount := utils.ParseIndonesianAmount(message)
 	if amount <= 0 {
 		return "⚠️ **Jumlah Tidak Valid.** Sebutkan nominalnya ya, contoh: 'Bayar KPR 2 juta pake BCA'."
 	}
 
 	// Create a "name-only" string by removing the amount part to avoid digits-stripping issues
 	// e.g., "iphone 15 pro 3 juta" -> "iphone 15 pro"
-	amountStr := extractAmountString(msg)
+	amountStr := utils.ExtractAmountString(msg)
 	msgWithoutAmount := msg
 	if amountStr != "" {
 		msgWithoutAmount = strings.Replace(msg, amountStr, "", 1)
 	}
 
 	// 2. Extract Names
-	debtNameQuery := extractDebtNameFromMessage(msgWithoutAmount)
-	accountNameQuery := extractAccountNameFromMessage(msg)
+	debtNameQuery := utils.ExtractDebtNameFromMessage(msgWithoutAmount)
+	accountNameQuery := utils.ExtractAccountNameFromMessage(msg)
 
 	if debtNameQuery == "" {
 		return "🤔 **Hutang yang mana?** Sebutkan nama hutangnya, misal: 'Bayar **Laptop** 500rb'."
@@ -1993,64 +1805,13 @@ func containsAny(s string, keywords []string) bool {
 	return false
 }
 
-// Helper extraction functions for Debt
-func extractDebtNameFromMessage(msg string) string {
-	// Clean typical command and filler words
-	removables := []string{
-		"bayar", "bayarin", "cicil", "cicilan", "pake", "pakai", "pakek", "menggunakan",
-		"jumlah", "untuk", "sebesar", "rp", "juta", "ribu", "rb", "jt", "nominalnya",
-		"bayarkan", "ada", "baru", "tambah", "catat", "buat", "punya", "bunga",
-		"persen", "percent", "tenor", "bulan", "tahun", "aku", "mau", "saya", "ingin",
-		"hutang", "hutangku", "tagihan", "dong", "nih", "ya", "sip", "oke", "tolong",
-	}
-
-	cleaned := msg
-	for _, r := range removables {
-		// Use regex to replace whole words only to avoid stripping parts of names (e.g., "bank")
-		re := regexp.MustCompile(`(?i)\b` + r + `\b`)
-		cleaned = re.ReplaceAllString(cleaned, "")
-	}
-
-	// Remove any remaining percentage signs but keep digits (they might be part of an asset name like "iPhone 15")
-	rePct := regexp.MustCompile(`\d+(?:\.\d+)?\s*%`)
-	cleaned = rePct.ReplaceAllString(cleaned, "")
-
-	words := strings.Fields(cleaned)
-	if len(words) > 0 {
-		// Join up to 3 words for richer entity names (e.g., "Bank Mandiri KPR")
-		limit := 3
-		if len(words) < limit {
-			limit = len(words)
-		}
-		return strings.Join(words[:limit], " ")
-	}
-	return ""
-}
-
-func extractAccountNameFromMessage(msg string) string {
-	// Pattern like "pake [account]" or "pakai [account]" or "dari [account]"
-	keywords := []string{"pake", "pakai", "pakek", "dari", "rekening", "akun"}
-	for _, kw := range keywords {
-		if strings.Contains(msg, kw) {
-			parts := strings.Split(msg, kw)
-			if len(parts) >= 2 {
-				words := strings.Fields(parts[1])
-				if len(words) > 0 {
-					return words[0]
-				}
-			}
-		}
-	}
-	return ""
-}
-
 func (s *ChatbotService) handleAssetPriceQuery(userID, message string) string {
 	if s.priceService == nil {
 		return "Layanan pengecekan harga belum aktif."
 	}
 
 	msg := strings.ToLower(message)
-	symbol := extractSymbolFromMessage(msg)
+	symbol := utils.ExtractSymbolFromMessage(msg)
 
 	if symbol == "" {
 		return "Tentu! Kamu mau cek harga apa? Sebutkan nama asetnya, misal: 'Harga Bitcoin' atau 'Harga AAPL'."
@@ -2096,42 +1857,10 @@ func (s *ChatbotService) handleAssetPriceQuery(userID, message string) string {
 	}
 
 	summary := fmt.Sprintf("%s **Harga Real-time %s**\n\n", icon, assetName)
-	summary += fmt.Sprintf("💰 **Rp%s**\n", formatNumber(price))
+	summary += fmt.Sprintf("💰 **Rp%s**\n", utils.FormatNumber(price))
 	summary += fmt.Sprintf("🕒 *Update: %s*\n\n", time.Now().Format("15:04:05 WIB"))
 
 	summary += "💡 *Disclaimer: Harga di atas adalah indikasi real-time dari market global. Tetap lakukan riset sebelum berinvestasi.*"
 
 	return summary
-}
-
-func extractSymbolFromMessage(msg string) string {
-	removables := []string{"harga", "berapa", "price", "nilai", "saat", "ini", "sekarang", "cek", "dong", "saham", "crypto"}
-	cleaned := msg
-	for _, r := range removables {
-		cleaned = strings.ReplaceAll(cleaned, r, "")
-	}
-	words := strings.Fields(cleaned)
-	if len(words) > 0 {
-		return words[len(words)-1] // Often the symbol is the last word
-	}
-	return ""
-}
-
-func formatNumber(val float64) string {
-	if val >= 1000 {
-		return fmt.Sprintf("%.0f", val)
-	}
-	return fmt.Sprintf("%.2f", val)
-}
-
-func extractAmountString(msg string) string {
-	// Pattern for "X juta" or "X million"
-	re := regexp.MustCompile(`(\d+(?:\.\d+)?\s*(?:juta|jt|million|m|ribu|rb|thousand|k))`)
-	if match := re.FindString(msg); match != "" {
-		return match
-	}
-
-	// Pattern for plain numbers
-	reNumeric := regexp.MustCompile(`(\d{4,})`) // 4 digits or more usually an amount
-	return reNumeric.FindString(msg)
 }
