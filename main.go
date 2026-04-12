@@ -73,6 +73,10 @@ func main() {
 	chatbotService.SetSavingsGoalService(savingsGoalService)
 	chatbotService.SetSpendingInsightService(spendingInsightService)
 	chatbotService.SetBillReminderService(billReminderService)
+	chatbotService.SetDebtService(services.NewDebtService(client, "mydb"))
+	chatbotService.SetRecurringTransactionService(services.NewRecurringTransactionService(client, "mydb"))
+	chatbotService.SetAccountService(services.NewAccountService(client, "mydb"))
+	chatbotService.SetBudgetService(budgetService)
 
 	auth := router.Group("/auth")
 	{

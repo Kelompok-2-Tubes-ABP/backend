@@ -33,6 +33,7 @@ type ChatbotService struct {
 	billReminderService         *BillReminderService
 	debtService                 *DebtService
 	recurringTransactionService *RecurringTransactionService
+	budgetService               *BudgetService
 	budgetCollection            *mongo.Collection
 	openAIAPIKey                string
 	ollamaURL                   string
@@ -53,6 +54,7 @@ func NewChatService(client *mongo.Client, dbName string, transactionService *Tra
 
 	return &ChatbotService{
 		collection:         client.Database(dbName).Collection("chat_history"),
+		budgetCollection:   client.Database(dbName).Collection("budgets"),
 		transactionService: transactionService,
 		openAIAPIKey:       os.Getenv("OPENAI_API_KEY"),
 		ollamaURL:          ollamaURL,
@@ -101,6 +103,11 @@ func (s *ChatbotService) SetAccountService(as *AccountService) {
 	s.accountService = as
 }
 
+// SetBudgetService - Inject BudgetService
+func (s *ChatbotService) SetBudgetService(bs *BudgetService) {
+	s.budgetService = bs
+}
+
 // ProcessMessage - Main entry point
 func (s *ChatbotService) ProcessMessage(userID string, message string, sessionID string) (string, error) {
 	// Save user message
@@ -128,8 +135,8 @@ func (s *ChatbotService) ProcessMessage(userID string, message string, sessionID
 	if needsTool {
 		response = s.executeTool(toolName, toolArgs, userID, context)
 	} else {
-		// Try Ollama first, then fall back to OpenAI
-		resp, err := s.callOllama(message, context)
+		// Use Ollama with History for better follow-up capability
+		resp, err := s.callOllamaWithHistory(message, context, conversationHistory)
 		if err != nil {
 			// Try OpenAI as fallback
 			resp, err = s.callOpenAI(message, context)
@@ -170,18 +177,13 @@ func (s *ChatbotService) analyzeIntent(message string, context map[string]interf
 	}
 
 	// Investment suggestions/recommendations
-	if containsAny(msg, []string{"saran", "recommend", "suggest", "tips", "bagus", "good"}) {
+	if containsAny(msg, []string{"saran", "recommend", "suggest", "tips", "bagus", "good", "ide"}) {
 		return true, "investment", map[string]interface{}{}
 	}
 
-	// Investment - deduplicated
-	if containsAny(msg, []string{"saran", "recommend", "suggest", "tips"}) {
-		return true, "investment", map[string]interface{}{}
-	}
-
-	// Debt - hutang, cicilan, pinjaman
-	if containsAny(msg, []string{"hutang", "debt", "pinjaman", "kredit", "cicilan", "loan"}) {
-		return true, "debt", map[string]interface{}{}
+	// Debt - hutang, cicilan, pinjaman, credit
+	if containsAny(msg, []string{"hutang", "debt", "pinjaman", "kredit", "credit", "cicilan", "loan"}) {
+		return true, "debt", map[string]interface{}{"message": message}
 	}
 
 	// Transaction - transaksi, pengeluaran, income
@@ -206,7 +208,7 @@ func (s *ChatbotService) analyzeIntent(message string, context map[string]interf
 
 	// Bills & Recurring
 	if containsAny(msg, []string{"bill", "tagihan", "reminder", "jatuh tempo", "pembayaran", "bulanan"}) {
-		return true, "bills", map[string]interface{}{}
+		return true, "bills", map[string]interface{}{"message": message}
 	}
 
 	// Recurring - transaksi berulang
@@ -677,18 +679,106 @@ func (s *ChatbotService) listSavingsGoals(goals []models.SavingsGoal) string {
 }
 
 func (s *ChatbotService) handleBudget(userID, message string) string {
-	return "Fitur budget akan segera tersedia!"
+	if s.budgetService == nil {
+		return "Layanan anggaran belum siap. Hubungi admin."
+	}
+
+	month := time.Now().Format("2006-01")
+	msg := strings.ToLower(message)
+
+	// Determine if user is asking for category budget specifically
+	isCategoryQuery := containsAny(msg, []string{"kategori", "category", "per group", "per bagian"})
+
+	summary := fmt.Sprintf("📊 **Analisa Anggaran Kamu (%s)**\n\n", month)
+
+	// 1. Get Monthly Budget Summary
+	budgets, err := s.budgetService.GetAllBudgetsWithSpending(userID)
+	if err != nil || len(budgets) == 0 {
+		return "Kamu belum buat budget nih bulan ini. Mau dibantu buat anggaran pertama?"
+	}
+
+	// Find current month's budget
+	var currentBudget map[string]interface{}
+	for _, b := range budgets {
+		if b["month"] == month {
+			currentBudget = b
+			break
+		}
+	}
+
+	if currentBudget != nil {
+		limit := currentBudget["limit"].(float64)
+		spent := currentBudget["spent"].(float64)
+		remaining := limit - spent
+		percent := (spent / limit) * 100
+
+		statusLabel := "✅ Aman"
+		if percent >= 100 {
+			statusColor := "🔴"
+			statusLabel = "BAHAYA (Over-budget!)"
+			summary += fmt.Sprintf("%s **Status: %s**\n", statusColor, statusLabel)
+		} else if percent >= 80 {
+			statusColor := "🟡"
+			statusLabel = "Waspada (Sudah jalan 80%+)"
+			summary += fmt.Sprintf("%s **Status: %s**\n", statusColor, statusLabel)
+		} else {
+			summary += fmt.Sprintf("✅ **Status: %s**\n", statusLabel)
+		}
+
+		summary += fmt.Sprintf("💰 Total Limit: Rp%.0f\n", limit)
+		summary += fmt.Sprintf("💸 Sudah Terpakai: Rp%.0f (%.1f%%)\n", spent, percent)
+		summary += fmt.Sprintf("📥 Sisa Saldo Budget: Rp%.0f\n\n", remaining)
+	}
+
+	// 2. Get Detailed Category Budgets if requested or if total is high
+	catBudgets, err := s.budgetService.GetAllCategoryBudgetsWithSpending(userID, month)
+	if err == nil && len(catBudgets) > 0 {
+		summary += "📂 **Detail per Kategori:**\n"
+		count := 0
+		for _, cb := range catBudgets {
+			// Only show current month
+			if cb["month"] == month {
+				limit := cb["budget_amount"].(float64)
+				spent := cb["spent"].(float64)
+				catName := cb["category_name"].(string)
+				percent := (spent / limit) * 100
+
+				emoji := "🔹"
+				if percent >= 100 {
+					emoji = "❌"
+				} else if percent >= 80 {
+					emoji = "⚠️"
+				}
+
+				summary += fmt.Sprintf("%s %s: Rp%.0f / Rp%.0f (%.0f%%)\n",
+					emoji, catName, spent, limit, percent)
+				count++
+			}
+		}
+		if count == 0 {
+			summary += "_Belum ada budget kategori yang dibuat._\n"
+		}
+	}
+
+	if !isCategoryQuery {
+		summary += "\n💡 *Tips: Kamu bisa tanya \"Budget kategori\" untuk melihat detail per pos pengeluaran.*"
+	}
+
+	return summary
 }
 
 func (s *ChatbotService) handleInvestment(userID, message string) string {
-	// Convert userID string to ObjectID
-	userOID, err := primitive.ObjectIDFromHex(userID)
-	if err != nil {
-		return "Error: Invalid user ID"
+	msg := strings.ToLower(message)
+
+	// 1. Detect Price Query (e.g., "Harga Bitcoin", "Price AAPL")
+	priceKeywords := []string{"harga", "price", "nilai", "berapa", "asuransi", "saham", "crypto"}
+	if containsAny(msg, priceKeywords) && len(strings.Fields(msg)) <= 6 {
+		return s.handleAssetPriceQuery(userID, message)
 	}
 
+	userOID, _ := primitive.ObjectIDFromHex(userID)
 	if s.investmentService == nil {
-		return "Investment service belum tersedia."
+		return "Layanan investasi belum tersedia."
 	}
 
 	investments, err := s.investmentService.GetUserInvestments(userOID)
@@ -697,7 +787,6 @@ func (s *ChatbotService) handleInvestment(userID, message string) string {
 	}
 
 	if len(investments) == 0 {
-		// Instead of showing empty message, show recommendations
 		return s.handleInvestmentRecommendation(userID, message)
 	}
 
@@ -1017,163 +1106,402 @@ func (s *ChatbotService) handleInvestmentRecommendation(userID, message string) 
 }
 
 func (s *ChatbotService) handleBills(userID, message string) string {
-	// Convert userID string to ObjectID
-	userOID, err := primitive.ObjectIDFromHex(userID)
-	if err != nil {
-		return "Error: Invalid user ID"
+	msg := strings.ToLower(message)
+
+	// 1. Detect creation intent
+	creationKeywords := []string{"ada", "tambah", "catat", "buat", "punya", "baru", "jatuh tempo"}
+	amount := parseIndonesianAmount(message)
+	if containsAny(msg, creationKeywords) && amount > 0 {
+		return s.handleAddBill(userID, message)
 	}
 
+	userOID, _ := primitive.ObjectIDFromHex(userID)
 	if s.billReminderService == nil {
-		return "Bill reminder service belum tersedia."
+		return "Layanan tagihan belum tersedia."
 	}
 
 	bills, err := s.billReminderService.GetUserBillReminders(userOID)
-	if err != nil {
-		return fmt.Sprintf("Error mengambil data tagihan: %v", err)
+	if err != nil || len(bills) == 0 {
+		return "📋 Kamu tidak memiliki daftar tagihan saat ini. Mau saya bantu catat tagihan baru?"
 	}
 
-	if len(bills) == 0 {
-		return "📋 Kamu tidak memiliki tagihan aktif."
-	}
+	var overdue []models.BillReminder
+	var dueSoon []models.BillReminder
+	var upcoming []models.BillReminder
 
-	summary := "📋 Tagihan Aktif:\n\n"
-	totalDue := 0.0
-	overdueCount := 0
-	dueSoonCount := 0
+	now := time.Now()
+	oneWeekLater := now.AddDate(0, 0, 7)
 
 	for _, bill := range bills {
-		statusIcon := "📅"
+		if bill.IsPaid {
+			continue
+		}
 		status := bill.GetDueStatus()
 		if status == "overdue" {
-			statusIcon = "⚠️"
-			overdueCount++
-		} else if status == "due_soon" {
-			statusIcon = "⏰"
-			dueSoonCount++
+			overdue = append(overdue, bill)
+		} else if bill.NextDueDate.Before(oneWeekLater) {
+			dueSoon = append(dueSoon, bill)
+		} else {
+			upcoming = append(upcoming, bill)
 		}
-
-		totalDue += bill.Amount
-
-		summary += fmt.Sprintf("%s %s\n", statusIcon, bill.Name)
-		summary += fmt.Sprintf("   Jumlah: Rp%.0f\n", bill.Amount)
-		summary += fmt.Sprintf("   Jatuh Tempo: %s\n", bill.NextDueDate.Format("02 Jan 2006"))
-		summary += fmt.Sprintf("   Frekuensi: %s\n\n", bill.BillingCycle)
 	}
 
-	if overdueCount > 0 {
-		summary += fmt.Sprintf("⚠️ %d tagihan overdue!\n", overdueCount)
+	if len(overdue) == 0 && len(dueSoon) == 0 && len(upcoming) == 0 {
+		return "✅ Mantap! Semua tagihan kamu bulan ini sudah lunas."
 	}
-	if dueSoonCount > 0 {
-		summary += fmt.Sprintf("⏰ %d tagihan akan jatuh tempo\n", dueSoonCount)
+
+	summary := ""
+
+	// Handle Overdue
+	if len(overdue) > 0 {
+		summary += "🚨 **GAWAT! Tagihan ini sudah lewat tempo:**\n"
+		for _, b := range overdue {
+			summary += fmt.Sprintf("- %s (Rp%.0f) - Segera bayar ya!\n", b.Name, b.Amount)
+		}
+		summary += "\n"
 	}
-	summary += fmt.Sprintf("\n💰 Total Tagihan: Rp%.0f", totalDue)
+
+	// Handle Due Soon
+	if len(dueSoon) > 0 {
+		summary += "📅 **Minggu ini ada tagihan yang mau jatuh tempo lho:**\n"
+		for _, b := range dueSoon {
+			days := int(b.NextDueDate.Sub(now).Hours() / 24)
+			dateStr := b.NextDueDate.Format("02 Jan")
+			dayLabel := fmt.Sprintf("%d hari lagi", days)
+			if days <= 0 {
+				dayLabel = "HARI INI"
+			} else if days == 1 {
+				dayLabel = "Besok"
+			}
+
+			summary += fmt.Sprintf("- **%s** (Rp%.0f) - Jatuh tempo %s (%s)\n",
+				b.Name, b.Amount, dateStr, dayLabel)
+		}
+		summary += "\n"
+	}
+
+	// Handle Upcoming
+	if len(upcoming) > 0 && len(summary) < 500 {
+		summary += "🗒️ **Tagihan lainnya:**\n"
+		for i, b := range upcoming {
+			if i >= 3 {
+				break
+			}
+			summary += fmt.Sprintf("- %s (Rp%.0f) - %s\n", b.Name, b.Amount, b.NextDueDate.Format("02 Jan"))
+		}
+	}
 
 	return summary
 }
 
+func (s *ChatbotService) handleAddBill(userID, message string) string {
+	msg := strings.ToLower(message)
+	userOID, _ := primitive.ObjectIDFromHex(userID)
+
+	amount := parseIndonesianAmount(message)
+	name := extractBillNameFromMessage(msg)
+	if name == "" || name == "tagihan" || name == "bill" {
+		name = "Tagihan Baru"
+	}
+
+	category := extractExpenseCategory(msg)
+	if category == "" {
+		category = "other"
+	}
+
+	bill := models.BillReminder{
+		UserID:      userOID,
+		Name:        strings.Title(name),
+		Amount:      amount,
+		Category:    category,
+		NextDueDate: time.Now().AddDate(0, 1, 0), // Default to next month
+		IsPaid:      false,
+	}
+
+	created, err := s.billReminderService.CreateBillReminder(bill)
+	if err != nil {
+		return fmt.Sprintf("❌ Gagal mencatat tagihan: %v", err)
+	}
+
+	res := fmt.Sprintf("✅ **Tagihan Berhasil Dicatat!**\n\n")
+	res += fmt.Sprintf("📋 **Nama:** %s\n", created.Name)
+	res += fmt.Sprintf("💰 **Nominal:** Rp%.0f\n", created.Amount)
+	res += fmt.Sprintf("📂 **Kategori:** %s\n", created.Category)
+	res += fmt.Sprintf("📅 **Tempo:** %s (Estimasi)\n", created.NextDueDate.Format("02 Jan 2006"))
+	res += fmt.Sprintf("\nSaya akan ingatkan kamu sebelum jatuh tempo ya!")
+
+	return res
+}
+
+func extractBillNameFromMessage(msg string) string {
+	removables := []string{"tagihan", "bill", "ada", "tambah", "catat", "buat", "punya", "baru", "jatuh", "tempo", "dalam", "bulan", "minggu", "hari", "sebesar", "nominalny", "nominal", "rp", "juta", "ribu", "rb", "jt"}
+	cleaned := msg
+	for _, r := range removables {
+		cleaned = strings.ReplaceAll(cleaned, r, "")
+	}
+	re := regexp.MustCompile(`\d+`)
+	cleaned = re.ReplaceAllString(cleaned, "")
+	words := strings.Fields(cleaned)
+	if len(words) > 0 {
+		return strings.Join(words, " ")
+	}
+	return ""
+}
+
 // handleRecurring handles recurring transactions
 func (s *ChatbotService) handleRecurring(userID, message string) string {
-	// Convert userID string to ObjectID
-	userOID, err := primitive.ObjectIDFromHex(userID)
-	if err != nil {
-		return "Error: Invalid user ID"
-	}
-
+	userOID, _ := primitive.ObjectIDFromHex(userID)
 	if s.recurringTransactionService == nil {
-		return "Recurring transaction service belum tersedia."
+		return "Layanan transaksi rutin belum tersedia."
 	}
 
-	recurring, err := s.recurringTransactionService.GetUserRecurringTransactions(userOID)
-	if err != nil {
-		return fmt.Sprintf("Error mengambil data recurring: %v", err)
+	recurrings, err := s.recurringTransactionService.GetActiveRecurringTransactions(userOID)
+	if err != nil || len(recurrings) == 0 {
+		return "🔄 Kamu belum punya langganan atau pengeluaran rutin yang aktif."
 	}
 
-	if len(recurring) == 0 {
-		return "🔄 Kamu tidak memiliki transaksi berulang."
-	}
+	summary := "🔄 **Info Pengeluaran Rutin Kamu:**\n\n"
 
-	summary := "🔄 Transaksi Berulang:\n\n"
-	totalMonthly := 0.0
+	now := time.Now()
+	oneWeekLater := now.AddDate(0, 0, 7)
 
-	for _, rec := range recurring {
-		if !rec.IsActive {
-			continue
-		}
-
-		icon := "💸"
-		if rec.Type == "income" {
-			icon = "💰"
-		}
-
-		freq := string(rec.Frequency)
-		summary += fmt.Sprintf("%s %s\n", icon, rec.Name)
-		summary += fmt.Sprintf("   Jumlah: Rp%.0f\n", rec.Amount)
-		summary += fmt.Sprintf("   Frekuensi: %s\n", freq)
-		summary += fmt.Sprintf("   Next: %s\n\n", rec.NextRunDate.Format("02 Jan 2006"))
-
-		// Calculate monthly equivalent
-		switch rec.Frequency {
-		case "daily":
-			totalMonthly += rec.Amount * 30
-		case "weekly":
-			totalMonthly += rec.Amount * 4
-		case "biweekly":
-			totalMonthly += rec.Amount * 2
-		case "monthly":
-			totalMonthly += rec.Amount
-		case "quarterly":
-			totalMonthly += rec.Amount / 3
-		case "yearly":
-			totalMonthly += rec.Amount / 12
+	hasSoon := false
+	for _, rt := range recurrings {
+		if !rt.NextRunDate.IsZero() && rt.NextRunDate.Before(oneWeekLater) {
+			if !hasSoon {
+				summary += "⏳ **Akan didebet dalam 7 hari ke depan:**\n"
+				hasSoon = true
+			}
+			summary += fmt.Sprintf("- **%s**: Rp%.0f (Tanggal %s)\n",
+				rt.Name, rt.Amount, rt.NextRunDate.Format("02 Jan"))
 		}
 	}
 
-	summary += fmt.Sprintf("💵 Total Bulanan: Rp%.0f", totalMonthly)
+	if hasSoon {
+		summary += "\n"
+	}
+
+	summary += "📝 **Daftar Langganan Aktif:**\n"
+	for _, rt := range recurrings {
+		summary += fmt.Sprintf("- %s (Rp%.0f) - %s\n", rt.Name, rt.Amount, rt.Frequency)
+	}
 
 	return summary
 }
 
 func (s *ChatbotService) handleDebt(userID, message string) string {
-	// Convert userID string to ObjectID
-	userOID, err := primitive.ObjectIDFromHex(userID)
-	if err != nil {
-		return "Error: Invalid user ID"
+	msg := strings.ToLower(message)
+
+	// 1. Detect payment intent
+	paymentKeywords := []string{"bayar", "pay", "cicil", "setor", "bayarin"}
+	if containsAny(msg, paymentKeywords) {
+		return s.handleDebtPayment(userID, message)
 	}
 
+	// 2. Detect creation intent (e.g., "aku ada hutang...", "tambah cicilan...")
+	creationKeywords := []string{"ada", "tambah", "catat", "buat", "punya", "mempunyai", "baru"}
+	amount := parseIndonesianAmount(message)
+	if (containsAny(msg, creationKeywords) && amount > 0) || (amount > 0 && containsAny(msg, []string{"bunga", "tenor", "bulan"})) {
+		return s.handleAddDebt(userID, message)
+	}
+
+	userOID, _ := primitive.ObjectIDFromHex(userID)
 	if s.debtService == nil {
-		return "Debt service belum tersedia."
+		return "Layanan hutang belum tersedia."
 	}
 
 	debts, err := s.debtService.GetUserDebts(userOID)
-	if err != nil {
-		return fmt.Sprintf("Error mengambil data hutang: %v", err)
+	if err != nil || len(debts) == 0 {
+		return "🎯 Kamu tidak memiliki hutang aktif saat ini. Bagus sekali!"
 	}
 
-	if len(debts) == 0 {
-		return "🎯 Kamu tidak memiliki hutang aktif. Selamat!"
+	summary := "🏦 **Daftar Hutang & Cicilan Kamu:**\n\n"
+	for _, d := range debts {
+		progress := (1 - (d.CurrentBalance / d.OriginalAmount)) * 100
+		summary += fmt.Sprintf("- **%s**: Sisa tagihan Rp%.0f / Rp%.0f\n", d.Name, d.CurrentBalance, d.OriginalAmount)
+		summary += fmt.Sprintf("  📊 Progress Pelunasan: %.1f%%\n", progress)
+		summary += fmt.Sprintf("  📅 Pembayaran Berikutnya: %s (Rp%.0f)\n\n", d.NextPaymentDate.Format("02 Jan"), d.PaymentAmount)
 	}
 
-	summary := "💳 Status Hutang:\n\n"
-	totalDebt := 0.0
-	totalPaid := 0.0
-
-	for _, debt := range debts {
-		totalDebt += debt.OriginalAmount
-		totalPaid += debt.TotalPaid
-
-		summary += fmt.Sprintf("📌 %s (%s)\n", debt.Name, debt.Creditor)
-		summary += fmt.Sprintf("   Saldo Awal: Rp%.0f\n", debt.OriginalAmount)
-		summary += fmt.Sprintf("   Sisa Saldo: Rp%.0f\n", debt.CurrentBalance)
-		summary += fmt.Sprintf("   Total Dibayar: Rp%.0f\n", debt.TotalPaid)
-		summary += fmt.Sprintf("   Cicilan: Rp%.0f/bulan\n\n", debt.PaymentAmount)
-	}
-
-	if totalDebt > 0 {
-		progress := (totalPaid / totalDebt) * 100
-		summary += fmt.Sprintf("📊 Total: Rp%.0f / Rp%.0f (%.0f%%)", totalPaid, totalDebt, progress)
-	}
-
+	summary += "💡 *Tips: Kamu bisa bilang: \"Bayar [nama hutang] [jumlah] pake [nama akun]\"*"
 	return summary
+}
+
+func (s *ChatbotService) handleAddDebt(userID, message string) string {
+	msg := strings.ToLower(message)
+	userOID, _ := primitive.ObjectIDFromHex(userID)
+
+	amount := parseIndonesianAmount(message)
+
+	// Create a "name-only" string by removing the amount part
+	amountStr := extractAmountString(msg)
+	msgWithoutAmount := msg
+	if amountStr != "" {
+		msgWithoutAmount = strings.Replace(msg, amountStr, "", 1)
+	}
+
+	interest := extractInterestRate(msg)
+	tenor := extractTenor(msg)
+	name := extractDebtNameFromMessage(msgWithoutAmount)
+	if name == "" || name == "credit" || name == "kredit" || name == "tagihan" {
+		name = "Kredit Baru"
+	}
+
+	debt := models.Debt{
+		UserID:           userOID,
+		Name:             strings.Title(name),
+		OriginalAmount:   amount,
+		CurrentBalance:   amount,
+		InterestRate:     interest,
+		TenorMonths:      tenor,
+		PaymentFrequency: models.RepayMonthly,
+		StartDate:        time.Now(),
+	}
+
+	// Calculate payment amount if tenor and interest are present
+	if tenor > 0 {
+		// Simple interest calculation for display / basic tracking
+		totalWithInterest := amount * (1 + (interest/100)*float64(tenor))
+		debt.PaymentAmount = totalWithInterest / float64(tenor)
+	}
+
+	created, err := s.debtService.CreateDebt(debt)
+	if err != nil {
+		return fmt.Sprintf("❌ Gagal mencatat hutang: %v", err)
+	}
+
+	res := fmt.Sprintf("✅ **Hutang Berhasil Dicatat!**\n\n")
+	res += fmt.Sprintf("🏦 **Nama:** %s\n", created.Name)
+	res += fmt.Sprintf("💰 **Nominal:** Rp%.0f\n", created.OriginalAmount)
+	if created.InterestRate > 0 {
+		res += fmt.Sprintf("📈 **Bunga:** %.1f%% per bulan\n", created.InterestRate)
+	}
+	if created.TenorMonths > 0 {
+		res += fmt.Sprintf("📅 **Tenor:** %d Bulan\n", created.TenorMonths)
+		res += fmt.Sprintf("💸 **Estimasi Cicilan:** Rp%.0f/bulan\n", debt.PaymentAmount)
+	}
+	res += fmt.Sprintf("\nSemangat pelunasannya ya! Kamu bisa cek detailnya kapan saja dengan ketik 'cek hutang'.")
+
+	return res
+}
+
+func extractInterestRate(msg string) float64 {
+	// Support: "1.2%", "1.2 persen", "1.2 percent"
+	re := regexp.MustCompile(`(\d+(?:\.\d+)?)\s*(?:%|persen|percent)`)
+	matches := re.FindStringSubmatch(msg)
+	if len(matches) > 1 {
+		val, _ := strconv.ParseFloat(matches[1], 64)
+		return val
+	}
+	return 0
+}
+
+func extractTenor(msg string) int {
+	// Support: "12 bulan", "1 tahun" (auto x12), "tenor 24"
+
+	// Check for years first
+	reYear := regexp.MustCompile(`(\d+)\s*(?:tahun|year|thn|yr)`)
+	matchesYear := reYear.FindStringSubmatch(msg)
+	if len(matchesYear) > 1 {
+		val, _ := strconv.Atoi(matchesYear[1])
+		return val * 12
+	}
+
+	// Check for months
+	reMonth := regexp.MustCompile(`(\d+)\s*(?:bulan|month|bln|mo|tenor)`)
+	matchesMonth := reMonth.FindStringSubmatch(msg)
+	if len(matchesMonth) > 1 {
+		val, _ := strconv.Atoi(matchesMonth[1])
+		return val
+	}
+	return 0
+}
+
+func (s *ChatbotService) handleDebtPayment(userID, message string) string {
+	userOID, _ := primitive.ObjectIDFromHex(userID)
+	msg := strings.ToLower(message)
+
+	// 1. Parse amount and create a version of message without that amount
+	amount := parseIndonesianAmount(message)
+	if amount <= 0 {
+		return "⚠️ **Jumlah Tidak Valid.** Sebutkan nominalnya ya, contoh: 'Bayar KPR 2 juta pake BCA'."
+	}
+
+	// Create a "name-only" string by removing the amount part to avoid digits-stripping issues
+	// e.g., "iphone 15 pro 3 juta" -> "iphone 15 pro"
+	amountStr := extractAmountString(msg)
+	msgWithoutAmount := msg
+	if amountStr != "" {
+		msgWithoutAmount = strings.Replace(msg, amountStr, "", 1)
+	}
+
+	// 2. Extract Names
+	debtNameQuery := extractDebtNameFromMessage(msgWithoutAmount)
+	accountNameQuery := extractAccountNameFromMessage(msg)
+
+	if debtNameQuery == "" {
+		return "🤔 **Hutang yang mana?** Sebutkan nama hutangnya, misal: 'Bayar **Laptop** 500rb'."
+	}
+
+	// 3. Find the Best Matching Debt
+	debts, _ := s.debtService.GetUserDebts(userOID)
+	var targetDebt *models.Debt
+	for _, d := range debts {
+		dName := strings.ToLower(d.Name)
+		if dName == debtNameQuery || strings.Contains(dName, debtNameQuery) || strings.Contains(debtNameQuery, dName) {
+			targetDebt = &d
+			break
+		}
+	}
+
+	if targetDebt == nil {
+		return fmt.Sprintf("❌ **Hutang '%s' tidak ditemukan.**\nCoba ketik 'cek hutang' untuk melihat daftar hutangmu.", debtNameQuery)
+	}
+
+	// 4. Find the Account & Check Balance
+	var accountID primitive.ObjectID
+	var targetAccount *models.Account
+	if accountNameQuery != "" && s.accountService != nil {
+		accounts, _ := s.accountService.GetUserAccounts(userOID)
+		for _, acc := range accounts {
+			accName := strings.ToLower(acc.Name)
+			if accName == accountNameQuery || strings.Contains(accName, accountNameQuery) {
+				targetAccount = &acc
+				accountID = acc.ID
+				break
+			}
+		}
+
+		if targetAccount != nil {
+			if targetAccount.CurrentBalance < amount {
+				return fmt.Sprintf("🚫 **Saldo Tidak Cukup.**\nSaldo di **%s** cuma Rp%.0f, sedangkan kamu mau bayar Rp%.0f.",
+					targetAccount.Name, targetAccount.CurrentBalance, amount)
+			}
+		}
+	}
+
+	// 5. Atomic Payment
+	_, err := s.debtService.MakePayment(targetDebt.ID, userOID, accountID, amount)
+	if err != nil {
+		return fmt.Sprintf("💥 **Gagal memproses pembayaran:** %v", err)
+	}
+
+	// 6. Response
+	res := "🎉 **Pembayaran Berhasil Dicatat!**\n\n"
+	res += fmt.Sprintf("🔹 **Tujuan:** %s\n", targetDebt.Name)
+	res += fmt.Sprintf("💰 **Nominal:** Rp%.0f\n", amount)
+	if targetAccount != nil {
+		res += fmt.Sprintf("💳 **Sumber:** %s\n", targetAccount.Name)
+	}
+
+	remaining := targetDebt.CurrentBalance - amount
+	if remaining <= 0 {
+		res += "\n🎊 **LUNAS!** Selamat, hutang ini sudah lunas sepenuhnya!"
+	} else {
+		res += fmt.Sprintf("\n📉 **Sisa Hutang:** Rp%.0f", remaining)
+	}
+
+	return res
 }
 
 // handleAccount handles account/saldo queries
@@ -1235,8 +1563,43 @@ func (s *ChatbotService) handleAccount(userID, message string) string {
 }
 
 func (s *ChatbotService) handleFinancialHealth(userID, message string) string {
-	transactions, _ := s.transactionService.ShowTransaction(userID)
+	userOID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return "Error: Invalid user ID"
+	}
 
+	summary := "🩺 **Laporan Kesehatan Keuangan Kamu**\n\n"
+
+	// 1. Get Real Health Score
+	if s.spendingInsightService != nil {
+		healthScore, err := s.spendingInsightService.GetFinancialHealthScore(userOID)
+		if err == nil {
+			statusColor := "🟢" // Sehat
+			if healthScore.OverallScore < 50 {
+				statusColor = "🔴" // Bahaya
+			} else if healthScore.OverallScore < 75 {
+				statusColor = "🟡" // Waspada
+			}
+
+			summary += fmt.Sprintf("%s **Skor Keseluruhan: %d/100**\n", statusColor, healthScore.OverallScore)
+			summary += fmt.Sprintf("📊 Tabungan: %d%% | Hutang: %d%% | Kontrol: %d%%\n\n",
+				healthScore.SavingsRate, healthScore.DebtLevel, healthScore.ExpenseControl)
+
+			if len(healthScore.Recommendations) > 0 {
+				summary += "**Saran Utama:**\n"
+				for i, rec := range healthScore.Recommendations {
+					if i >= 3 {
+						break
+					}
+					summary += fmt.Sprintf("💡 %s\n", rec)
+				}
+				summary += "\n"
+			}
+		}
+	}
+
+	// 2. Add Transaction Stats
+	transactions, _ := s.transactionService.ShowTransaction(userID)
 	var totalIncome, totalExpense float64
 	for _, tx := range transactions {
 		if tx.Category == "income" || tx.Category == "pemasukan" {
@@ -1245,15 +1608,29 @@ func (s *ChatbotService) handleFinancialHealth(userID, message string) string {
 			totalExpense += tx.Amount
 		}
 	}
+	summary += fmt.Sprintf("💰 **Ringkasan Bulan Ini:**\n- Pemasukan: Rp%.0f\n- Pengeluaran: Rp%.0f\n- Saldo: Rp%.0f\n\n",
+		totalIncome, totalExpense, totalIncome-totalExpense)
 
-	balance := totalIncome - totalExpense
-	health := "Sehat"
-	if balance < 0 {
-		health = "Perlu Perhatian"
+	// 3. Show Recent Unread Insights & Mark as Read
+	if s.spendingInsightService != nil {
+		insights, err := s.spendingInsightService.GetUserInsights(userOID, 3)
+		if err == nil && len(insights) > 0 {
+			hasInsights := false
+			for _, insight := range insights {
+				if !insight.IsRead {
+					if !hasInsights {
+						summary += "🔔 **Insight Terbaru:**\n"
+						hasInsights = true
+					}
+					summary += fmt.Sprintf("- **%s**: %s\n", insight.Title, insight.Description)
+					// Mark as read in background
+					go s.spendingInsightService.MarkAsRead(insight.ID, userOID)
+				}
+			}
+		}
 	}
 
-	return fmt.Sprintf("💰 Kesehatan Keuangan:\n\nPemasukan: Rp%.0f\nPengeluaran: Rp%.0f\nSaldo: Rp%.0f\nStatus: %s",
-		totalIncome, totalExpense, balance, health)
+	return summary
 }
 
 // callOllama - Call Ollama local AI
@@ -1488,10 +1865,12 @@ func (s *ChatbotService) callOpenAI(message string, context map[string]interface
 	return "Maaf, ada masalah dengan respons AI.", nil
 }
 
-// GetFinancialContext - Get user's financial data
+// GetFinancialContext - Get user's financial data enriched with budget, bills, and savings
 func (s *ChatbotService) GetFinancialContext(userID string) map[string]interface{} {
 	context := make(map[string]interface{})
+	userOID, _ := primitive.ObjectIDFromHex(userID)
 
+	// 1. Transaction Summary
 	if s.transactionService != nil {
 		transactions, _ := s.transactionService.ShowTransaction(userID)
 		var income, expense float64
@@ -1504,7 +1883,46 @@ func (s *ChatbotService) GetFinancialContext(userID string) map[string]interface
 		}
 		context["totalIncome"] = income
 		context["totalExpense"] = expense
+		context["balance"] = income - expense
 		context["transactionCount"] = len(transactions)
+	}
+
+	// 2. Budget Context
+	if s.budgetService != nil {
+		month := time.Now().Format("2006-01")
+		budgets, _ := s.budgetService.GetAllBudgetsWithSpending(userID)
+		for _, b := range budgets {
+			if b["month"] == month {
+				context["currentBudgetLimit"] = b["limit"]
+				context["currentBudgetSpent"] = b["spent"]
+				context["budgetOverLimit"] = b["spent"].(float64) > b["limit"].(float64)
+				break
+			}
+		}
+	}
+
+	// 3. Upcoming Bills Context
+	if s.billReminderService != nil {
+		bills, _ := s.billReminderService.GetUserBillReminders(userOID)
+		var upcomingBills []string
+		now := time.Now()
+		for _, b := range bills {
+			if !b.IsPaid && b.NextDueDate.Before(now.AddDate(0, 0, 7)) {
+				upcomingBills = append(upcomingBills, fmt.Sprintf("%s (Rp%.0f on %s)", b.Name, b.Amount, b.NextDueDate.Format("02 Jan")))
+			}
+		}
+		context["nearTermBills"] = upcomingBills
+	}
+
+	// 4. Savings Context
+	if s.savingsGoalService != nil {
+		goals, _ := s.savingsGoalService.GetUserSavingsGoals(userID)
+		var savingsSummary []string
+		for _, g := range goals {
+			progress := (g.CurrentAmount / g.TargetAmount) * 100
+			savingsSummary = append(savingsSummary, fmt.Sprintf("%s: %.1f%% complete", g.Name, progress))
+		}
+		context["savingsProgress"] = savingsSummary
 	}
 
 	return context
@@ -1573,4 +1991,147 @@ func containsAny(s string, keywords []string) bool {
 		}
 	}
 	return false
+}
+
+// Helper extraction functions for Debt
+func extractDebtNameFromMessage(msg string) string {
+	// Clean typical command and filler words
+	removables := []string{
+		"bayar", "bayarin", "cicil", "cicilan", "pake", "pakai", "pakek", "menggunakan",
+		"jumlah", "untuk", "sebesar", "rp", "juta", "ribu", "rb", "jt", "nominalnya",
+		"bayarkan", "ada", "baru", "tambah", "catat", "buat", "punya", "bunga",
+		"persen", "percent", "tenor", "bulan", "tahun", "aku", "mau", "saya", "ingin",
+		"hutang", "hutangku", "tagihan", "dong", "nih", "ya", "sip", "oke", "tolong",
+	}
+
+	cleaned := msg
+	for _, r := range removables {
+		// Use regex to replace whole words only to avoid stripping parts of names (e.g., "bank")
+		re := regexp.MustCompile(`(?i)\b` + r + `\b`)
+		cleaned = re.ReplaceAllString(cleaned, "")
+	}
+
+	// Remove any remaining percentage signs but keep digits (they might be part of an asset name like "iPhone 15")
+	rePct := regexp.MustCompile(`\d+(?:\.\d+)?\s*%`)
+	cleaned = rePct.ReplaceAllString(cleaned, "")
+
+	words := strings.Fields(cleaned)
+	if len(words) > 0 {
+		// Join up to 3 words for richer entity names (e.g., "Bank Mandiri KPR")
+		limit := 3
+		if len(words) < limit {
+			limit = len(words)
+		}
+		return strings.Join(words[:limit], " ")
+	}
+	return ""
+}
+
+func extractAccountNameFromMessage(msg string) string {
+	// Pattern like "pake [account]" or "pakai [account]" or "dari [account]"
+	keywords := []string{"pake", "pakai", "pakek", "dari", "rekening", "akun"}
+	for _, kw := range keywords {
+		if strings.Contains(msg, kw) {
+			parts := strings.Split(msg, kw)
+			if len(parts) >= 2 {
+				words := strings.Fields(parts[1])
+				if len(words) > 0 {
+					return words[0]
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func (s *ChatbotService) handleAssetPriceQuery(userID, message string) string {
+	if s.priceService == nil {
+		return "Layanan pengecekan harga belum aktif."
+	}
+
+	msg := strings.ToLower(message)
+	symbol := extractSymbolFromMessage(msg)
+
+	if symbol == "" {
+		return "Tentu! Kamu mau cek harga apa? Sebutkan nama asetnya, misal: 'Harga Bitcoin' atau 'Harga AAPL'."
+	}
+
+	// Try to determine type (crypto or stock)
+	// Simple heuristic: check crypto mapping first
+	invType := "stock"
+	if _, ok := CryptoSymbolMapping[symbol]; ok {
+		invType = "crypto"
+	} else if len(symbol) <= 3 && !strings.ContainsAny(symbol, "0123456789") {
+		// Common stocks are 3-4 letters
+		invType = "stock"
+	}
+
+	// Special cases for common names
+	if strings.Contains(msg, "bitcoin") || strings.Contains(msg, "btc") {
+		symbol = "btc"
+		invType = "crypto"
+	} else if strings.Contains(msg, "eth") || strings.Contains(msg, "ethereum") {
+		symbol = "eth"
+		invType = "crypto"
+	}
+
+	price, err := s.priceService.GetPrice(symbol, invType, "idr")
+	if err != nil {
+		// If failed as crypto, try as stock
+		if invType == "crypto" {
+			price, err = s.priceService.GetPrice(symbol, "stock", "idr")
+		} else {
+			price, err = s.priceService.GetPrice(symbol, "crypto", "idr")
+		}
+
+		if err != nil {
+			return fmt.Sprintf("Maaf, saya tidak bisa menemukan harga untuk '%s'. Pastikan simbol/namanya benar ya.", symbol)
+		}
+	}
+
+	assetName := strings.ToUpper(symbol)
+	icon := "📈"
+	if invType == "crypto" {
+		icon = "🪙"
+	}
+
+	summary := fmt.Sprintf("%s **Harga Real-time %s**\n\n", icon, assetName)
+	summary += fmt.Sprintf("💰 **Rp%s**\n", formatNumber(price))
+	summary += fmt.Sprintf("🕒 *Update: %s*\n\n", time.Now().Format("15:04:05 WIB"))
+
+	summary += "💡 *Disclaimer: Harga di atas adalah indikasi real-time dari market global. Tetap lakukan riset sebelum berinvestasi.*"
+
+	return summary
+}
+
+func extractSymbolFromMessage(msg string) string {
+	removables := []string{"harga", "berapa", "price", "nilai", "saat", "ini", "sekarang", "cek", "dong", "saham", "crypto"}
+	cleaned := msg
+	for _, r := range removables {
+		cleaned = strings.ReplaceAll(cleaned, r, "")
+	}
+	words := strings.Fields(cleaned)
+	if len(words) > 0 {
+		return words[len(words)-1] // Often the symbol is the last word
+	}
+	return ""
+}
+
+func formatNumber(val float64) string {
+	if val >= 1000 {
+		return fmt.Sprintf("%.0f", val)
+	}
+	return fmt.Sprintf("%.2f", val)
+}
+
+func extractAmountString(msg string) string {
+	// Pattern for "X juta" or "X million"
+	re := regexp.MustCompile(`(\d+(?:\.\d+)?\s*(?:juta|jt|million|m|ribu|rb|thousand|k))`)
+	if match := re.FindString(msg); match != "" {
+		return match
+	}
+
+	// Pattern for plain numbers
+	reNumeric := regexp.MustCompile(`(\d{4,})`) // 4 digits or more usually an amount
+	return reNumeric.FindString(msg)
 }
