@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -26,7 +27,58 @@ func ConnectDB() *mongo.Client {
 	}
 
 	fmt.Println("✅ Connected to MongoDB!")
+
+	// Initialize Indexes for performance
+	InitIndexes(client)
+
 	return client
+}
+
+// InitIndexes creates necessary indexes for robust database performance
+func InitIndexes(client *mongo.Client) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db := GetDB(client)
+
+	// Transaction index: speed up GetReport (find by user_id and sort/filter by date)
+	trxCol := db.Collection("transactions")
+	_, err := trxCol.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "user_id", Value: 1},
+			{Key: "date", Value: -1},
+		},
+	})
+	if err != nil {
+		fmt.Printf("⚠️ Failed to index transactions: %v\n", err)
+	}
+
+	// Budget index: find budget by user_id and month
+	budgetsCol := db.Collection("budgets")
+	_, err = budgetsCol.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "user_id", Value: 1},
+			{Key: "month", Value: -1},
+		},
+	})
+	if err != nil {
+		fmt.Printf("⚠️ Failed to index budgets: %v\n", err)
+	}
+
+	// Bills index: filter by active bills and due date
+	billsCol := db.Collection("bill_reminders")
+	_, err = billsCol.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "user_id", Value: 1},
+			{Key: "is_paid", Value: 1},
+			{Key: "next_due_date", Value: 1},
+		},
+	})
+	if err != nil {
+		fmt.Printf("⚠️ Failed to index bill_reminders: %v\n", err)
+	}
+
+	fmt.Println("✅ MongoDB Indexes Initialized")
 }
 
 var DB *mongo.Client = ConnectDB()

@@ -3,6 +3,7 @@ package chatbot_commands
 import (
 	"fmt"
 
+	"financeapi/essentials/constants"
 	"financeapi/essentials/services"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -60,7 +61,7 @@ func (c *HealthCommand) Handle(userID string, message string) string {
 	transactions, _ := c.txService.ShowTransaction(userID)
 	var totalIncome, totalExpense float64
 	for _, tx := range transactions {
-		if tx.Category == "income" || tx.Category == "pemasukan" {
+		if tx.Category == constants.TrxIncome || tx.Category == "pemasukan" {
 			totalIncome += tx.Amount
 		} else {
 			totalExpense += tx.Amount

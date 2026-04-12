@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"financeapi/essentials/constants"
 	"financeapi/essentials/services"
 	"financeapi/essentials/utils"
 
@@ -61,13 +62,13 @@ func (c *InvestCommand) handleInvestment(userID, message string) string {
 	for _, inv := range investments {
 		icon := "📊"
 		switch string(inv.Type) {
-		case "crypto":
+		case constants.InvCrypto:
 			icon = "🪙"
-		case "stock":
+		case constants.InvStock:
 			icon = "📈"
-		case "bond":
+		case constants.InvBond:
 			icon = "📜"
-		case "real_estate":
+		case constants.InvRealEstate:
 			icon = "🏠"
 		}
 
@@ -119,7 +120,7 @@ func (c *InvestCommand) handleInvestmentRecommendation(userID, message string) s
 				var price float64
 				var priceErr error
 				invType := string(inv.Type)
-				if strings.ToLower(invType) == "crypto" {
+				if strings.ToLower(invType) == constants.InvCrypto {
 					price, priceErr = c.priceService.GetCryptoPrice(inv.Symbol, "idr")
 				} else {
 					price, priceErr = c.priceService.GetStockPrice(inv.Symbol, true)
@@ -128,7 +129,7 @@ func (c *InvestCommand) handleInvestmentRecommendation(userID, message string) s
 					currentValue := price * inv.Quantity
 					totalValue += currentValue
 					icon := "📊"
-					if strings.ToLower(invType) == "crypto" {
+					if strings.ToLower(invType) == constants.InvCrypto {
 						icon = "🪙"
 					}
 					suggestion += fmt.Sprintf("  %s %s: %.4f @ Rp%.0f = Rp%.0f\n",
@@ -211,27 +212,27 @@ func (c *InvestCommand) handleAssetPriceQuery(userID, message string) string {
 		return "Tentu! Kamu mau cek harga apa? Sebutkan nama asetnya, misal: 'Harga Bitcoin' atau 'Harga AAPL'."
 	}
 
-	invType := "stock"
+	invType := constants.InvStock
 	if _, ok := services.CryptoSymbolMapping[symbol]; ok {
-		invType = "crypto"
+		invType = constants.InvCrypto
 	} else if len(symbol) <= 3 && !strings.ContainsAny(symbol, "0123456789") {
-		invType = "stock"
+		invType = constants.InvStock
 	}
 
 	if strings.Contains(msg, "bitcoin") || strings.Contains(msg, "btc") {
 		symbol = "btc"
-		invType = "crypto"
+		invType = constants.InvCrypto
 	} else if strings.Contains(msg, "eth") || strings.Contains(msg, "ethereum") {
 		symbol = "eth"
-		invType = "crypto"
+		invType = constants.InvCrypto
 	}
 
 	price, err := c.priceService.GetPrice(symbol, invType, "idr")
 	if err != nil {
-		if invType == "crypto" {
-			price, err = c.priceService.GetPrice(symbol, "stock", "idr")
+		if invType == constants.InvCrypto {
+			price, err = c.priceService.GetPrice(symbol, constants.InvStock, "idr")
 		} else {
-			price, err = c.priceService.GetPrice(symbol, "crypto", "idr")
+			price, err = c.priceService.GetPrice(symbol, constants.InvCrypto, "idr")
 		}
 
 		if err != nil {
@@ -241,7 +242,7 @@ func (c *InvestCommand) handleAssetPriceQuery(userID, message string) string {
 
 	assetName := strings.ToUpper(symbol)
 	icon := "📈"
-	if invType == "crypto" {
+	if invType == constants.InvCrypto {
 		icon = "🪙"
 	}
 

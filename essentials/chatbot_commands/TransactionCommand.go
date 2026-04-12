@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"financeapi/essentials/constants"
 	"financeapi/essentials/models"
 	"financeapi/essentials/services"
 	"financeapi/essentials/utils"
@@ -73,9 +74,9 @@ func (c *TransactionCommand) handleAddTransaction(userID, message string) string
 	isIncome := containsAny(msg, []string{"income", "pemasukan", "gaji", "pendapatan", "uang masuk", "gajian", "dapet", "dapat", "salary", "earned", "terima", "duit masuk"})
 	isExpense := containsAny(msg, []string{"spent", "beli", "buy", "purchase", "makan", "food", "lunch", "dinner", "belanja", "keluar", "bayar", "pay", "pengeluaran", "expense", "transaction", "untuk", "buying"})
 
-	category := "outcome"
+	category := constants.TrxOutcome
 	if isIncome && !isExpense {
-		category = "income"
+		category = constants.TrxIncome
 	} else {
 		specificCategory := utils.ExtractExpenseCategory(msg)
 		if specificCategory != "" {
@@ -99,7 +100,7 @@ func (c *TransactionCommand) handleAddTransaction(userID, message string) string
 	}
 
 	categoryLabel := "Pengeluaran"
-	if category == "income" {
+	if category == constants.TrxIncome {
 		categoryLabel = "Pemasukan"
 	}
 

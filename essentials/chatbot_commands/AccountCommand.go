@@ -3,6 +3,7 @@ package chatbot_commands
 import (
 	"fmt"
 
+	"financeapi/essentials/constants"
 	"financeapi/essentials/services"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -42,27 +43,27 @@ func (c *AccountCommand) Handle(userID string, message string) string {
 
 	for _, account := range accounts {
 		balance := account.CurrentBalance
-		if account.Type == "credit" {
+		if account.Type == constants.AccCredit {
 			balance = -account.CurrentBalance
 		}
 		totalBalance += balance
 
 		icon := "🏦"
 		switch account.Type {
-		case "wallet":
+		case constants.AccWallet:
 			icon = "👛"
-		case "cash":
+		case constants.AccCash:
 			icon = "💵"
-		case "credit":
+		case constants.AccCredit:
 			icon = "💳"
-		case "savings":
+		case constants.AccSavings:
 			icon = "🎯"
-		case "investment":
+		case constants.AccInvestment:
 			icon = "📈"
 		}
 
 		balanceStr := fmt.Sprintf("Rp%.0f", account.CurrentBalance)
-		if account.Type == "credit" {
+		if account.Type == constants.AccCredit {
 			balanceStr = fmt.Sprintf("Rp%.0f (hutang)", account.CurrentBalance)
 		}
 
