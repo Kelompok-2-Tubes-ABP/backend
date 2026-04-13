@@ -53,23 +53,22 @@ func generateNumericToken(length int) (string, error) {
 }
 
 func (s *UserService) CreateUser(user models.User) (models.User, error) {
-	var existingUser models.User
-	err := s.collection.FindOne(
-		context.TODO(),
-		bson.M{"username": user.Username},
-	).Decode(&existingUser)
+	var existingByEmail models.User
+	errEmail := s.collection.FindOne(context.TODO(), bson.M{"email": user.Email}).Decode(&existingByEmail)
 
-	if err == nil {
-		return models.User{}, errors.New("username already exists")
+	if errEmail == nil {
+		if existingByEmail.IsActive || existingByEmail.IsEmailVerified {
+			return models.User{}, errors.New("email already exists")
+		}
 	}
 
-	err = s.collection.FindOne(
-		context.TODO(),
-		bson.M{"email": user.Email},
-	).Decode(&existingUser)
+	var existingByUsername models.User
+	errUsername := s.collection.FindOne(context.TODO(), bson.M{"username": user.Username}).Decode(&existingByUsername)
 
-	if err == nil {
-		return models.User{}, errors.New("email already exists")
+	if errUsername == nil {
+		if existingByUsername.Email != user.Email {
+			return models.User{}, errors.New("username already exists")
+		}
 	}
 
 	hashedPassword, err := utils.HashPassword(user.Password)
@@ -77,11 +76,28 @@ func (s *UserService) CreateUser(user models.User) (models.User, error) {
 		return models.User{}, errors.New("failed to process password")
 	}
 	user.Password = hashedPassword
-
 	user.IsActive = false
 	user.IsEmailVerified = false
-	user.CreatedAt = time.Now()
 	user.UpdatedAt = time.Now()
+
+	if errEmail == nil && !existingByEmail.IsActive {
+		update := bson.M{
+			"$set": bson.M{
+				"username":            user.Username,
+				"password":            user.Password,
+				"updated_at":          user.UpdatedAt,
+				"password_changed_at": time.Now(),
+			},
+		}
+		_, err := s.collection.UpdateOne(context.TODO(), bson.M{"_id": existingByEmail.ID}, update)
+		if err != nil {
+			return models.User{}, err
+		}
+		user.ID = existingByEmail.ID
+		return user, nil
+	}
+
+	user.CreatedAt = time.Now()
 	user.PasswordChangedAt = time.Now()
 
 	result, err := s.collection.InsertOne(context.TODO(), user)
