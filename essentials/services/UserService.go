@@ -78,6 +78,7 @@ func (s *UserService) CreateUser(user models.User) (models.User, error) {
 	user.Password = hashedPassword
 	user.IsActive = false
 	user.IsEmailVerified = false
+	user.Role = "user" // Force role to "user" for API registration
 	user.UpdatedAt = time.Now()
 
 	if errEmail == nil && !existingByEmail.IsActive {

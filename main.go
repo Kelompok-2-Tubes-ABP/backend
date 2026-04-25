@@ -64,6 +64,7 @@ func main() {
 	debtService := services.NewDebtService(client, "mydb")
 	accountService := services.NewAccountService(client, "mydb")
 	recurringService := services.NewRecurringTransactionService(client, "mydb")
+	adminService := services.NewAdminService(client, "mydb")
 
 	// Analytics Service
 	analyticsService := services.NewAnalyticsService()
@@ -117,6 +118,7 @@ func main() {
 	routes.RegisterRecurringRoutes(router, recurringService)
 	routes.RegisterBillRoutes(router, billReminderService)
 	routes.RegisterInsightRoutes(router, spendingInsightService)
+	routes.RegisterAdminRoutes(router, adminService, userService)
 
 	router.Run()
 }
