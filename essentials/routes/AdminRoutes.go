@@ -27,7 +27,8 @@ func RegisterAdminRoutes(r *gin.Engine, adminService *services.AdminService, use
 		adminGroup.DELETE("/users/:id", adminHandler.DeleteUser)
 
 		// Transaction Management
-		adminGroup.GET("/transactions", adminHandler.GetRecentTransactions)
+		adminGroup.GET("/transactions/recent", adminHandler.GetRecentTransactions)
+		adminGroup.GET("/transactions/all", adminHandler.GetAllTransactions)
 		adminGroup.DELETE("/transactions/:id", adminHandler.DeleteTransaction)
 
 		// Alerts & Logs
@@ -54,7 +55,8 @@ func RegisterAdminRoutes(r *gin.Engine, adminService *services.AdminService, use
 		adminGroup.GET("/analytics", adminHandler.GetAnalyticsAndReports)
 		adminGroup.GET("/analytics/export", adminHandler.ExportAnalyticsReport)
 
-		// Settings
+		// Settings & Auth
 		adminGroup.POST("/password", adminHandler.ChangeAdminPassword)
+		adminGroup.POST("/logout", adminHandler.Logout)
 	}
 }

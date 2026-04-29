@@ -153,6 +153,39 @@ func (h *AdminHandler) GetRecentTransactions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": transactions})
 }
 
+// GetAllTransactions lists all transactions with pagination and search
+func (h *AdminHandler) GetAllTransactions(c *gin.Context) {
+	pageStr := c.DefaultQuery("page", "1")
+	limitStr := c.DefaultQuery("limit", "10")
+	search := c.Query("search")
+
+	page, _ := strconv.Atoi(pageStr)
+	if page < 1 {
+		page = 1
+	}
+
+	limit, _ := strconv.Atoi(limitStr)
+	if limit < 1 {
+		limit = 10
+	}
+
+	transactions, total, err := h.adminService.GetAllTransactions(page, limit, search)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch transactions"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   transactions,
+		"meta": gin.H{
+			"total": total,
+			"page":  page,
+			"limit": limit,
+		},
+	})
+}
+
 // DeleteTransaction removes a problematic transaction
 func (h *AdminHandler) DeleteTransaction(c *gin.Context) {
 	txID := c.Param("id")
@@ -559,4 +592,22 @@ func (h *AdminHandler) Login(c *gin.Context) {
 			"email":    admin.Email,
 		},
 	})
+}
+
+// Logout handles admin logout
+func (h *AdminHandler) Logout(c *gin.Context) {
+	jti, exists := c.Get("jti")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	collection := config.GetCollection(config.DB, "active_tokens")
+	_, err := collection.DeleteOne(context.TODO(), bson.M{"jti": jti})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Admin logged out successfully"})
 }
