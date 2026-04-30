@@ -17,11 +17,16 @@ import (
 
 type TransactionService struct {
 	collection *mongo.Collection
+	notificationService *NotificationService
 }
 
 func NewTransactionService(client *mongo.Client, dbName string) *TransactionService {
 	collection := client.Database(dbName).Collection("Transaction")
 	return &TransactionService{collection: collection}
+}
+
+func (s *TransactionService) SetNotificationService(ns *NotificationService) {
+	s.notificationService = ns
 }
 
 func buildFilters(userID string, filter models.FilterTransaction) bson.M {
@@ -121,6 +126,10 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 	} else {
 		if utils.IsOutcome(transaction.Category) {
 			if totalOutcome+transaction.Amount > budget.Limit {
+				if s.notificationService != nil {
+					objID, _ := primitive.ObjectIDFromHex(transaction.User_id)
+					s.notificationService.CreateNotification(context.TODO(), objID, "Over Budget Alert", fmt.Sprintf("Your transaction exceeds your monthly budget limit of %.2f", budget.Limit), models.NotifTypeBudget, "")
+				}
 				return models.Transaction{}, fmt.Errorf(
 					"❌ Budget exceeded: total %.2f / limit %.2f",
 					totalOutcome+transaction.Amount, budget.Limit,
@@ -128,6 +137,10 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 			} else if totalOutcome+transaction.Amount > 0.9*budget.Limit {
 				fmt.Printf("⚠️ Warning: You've reached 90%% of your monthly budget (%.2f / %.2f)\n",
 					totalOutcome+transaction.Amount, budget.Limit)
+				if s.notificationService != nil {
+					objID, _ := primitive.ObjectIDFromHex(transaction.User_id)
+					s.notificationService.CreateNotification(context.TODO(), objID, "Near Budget Limit", fmt.Sprintf("You have reached 90%% of your monthly budget (%.2f / %.2f)", totalOutcome+transaction.Amount, budget.Limit), models.NotifTypeBudget, "")
+				}
 			}
 		}
 	}
@@ -135,6 +148,14 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 	result, err := s.collection.InsertOne(context.TODO(), transaction)
 	if err != nil {
 		return models.Transaction{}, err
+	}
+
+	// Alert for large transactions
+	if transaction.Amount >= 5000000 && utils.IsOutcome(transaction.Category) {
+		if s.notificationService != nil {
+			objID, _ := primitive.ObjectIDFromHex(transaction.User_id)
+			s.notificationService.CreateNotification(context.TODO(), objID, "Large Transaction Alert", fmt.Sprintf("A large transaction of %.2f was detected in category %s.", transaction.Amount, transaction.Category), models.NotifTypeTransaction, "")
+		}
 	}
 
 	transaction.ID = result.InsertedID.(primitive.ObjectID)

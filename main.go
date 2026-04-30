@@ -65,6 +65,10 @@ func main() {
 	accountService := services.NewAccountService(client, "mydb")
 	recurringService := services.NewRecurringTransactionService(client, "mydb")
 	adminService := services.NewAdminService(client, "mydb")
+	notificationService := services.NewNotificationService(client.Database("mydb"))
+	
+	// Inject notifications into txService
+	txService.SetNotificationService(notificationService)
 
 	// Analytics Service
 	analyticsService := services.NewAnalyticsService()
@@ -109,6 +113,7 @@ func main() {
 
 	routes.RegisterSavingsGoalRoutes(router, savingsGoalService)
 	routes.RegisterWebhookRoutes(router, config.GetDB(client))
+	routes.RegisterNotificationRoutes(router, config.GetDB(client))
 	routes.RegisterInvestmentRoutes(router, investmentService, priceHandler)
 	routes.RegisterAnalyticsRoutes(router, analyticsService)
 
