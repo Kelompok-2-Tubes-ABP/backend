@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type AdminHandler struct {
@@ -201,6 +202,35 @@ func (h *AdminHandler) DeleteTransaction(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Transaction deleted successfully"})
 }
 
+// UpdateTransactionStatus updates a transaction's status
+func (h *AdminHandler) UpdateTransactionStatus(c *gin.Context) {
+	txID := c.Param("id")
+
+	var req struct {
+		Status string `json:"status" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status data"})
+		return
+	}
+
+	if req.Status != "pending" && req.Status != "completed" && req.Status != "failed" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Status must be pending, completed, or failed"})
+		return
+	}
+
+	err := h.adminService.UpdateTransactionStatus(txID, req.Status)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update transaction status"})
+		return
+	}
+
+	h.logAdminAction(c, "Update", "Transaction #"+txID, "Updated transaction status to "+req.Status)
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Transaction status updated successfully"})
+}
+
 // ChangeAdminPassword allows admin to change their own password
 func (h *AdminHandler) ChangeAdminPassword(c *gin.Context) {
 	var req struct {
@@ -219,7 +249,13 @@ func (h *AdminHandler) ChangeAdminPassword(c *gin.Context) {
 		return
 	}
 
-	err := h.userService.ChangePasswordByString(adminID.(string), req.CurrentPassword, req.NewPassword)
+	adminObjID, err := primitive.ObjectIDFromHex(adminID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid admin ID format"})
+		return
+	}
+
+	err = h.adminService.ChangeAdminPassword(adminObjID, req.CurrentPassword, req.NewPassword)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

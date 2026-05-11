@@ -145,6 +145,11 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 		}
 	}
 
+	// Set default status if empty
+	if transaction.Status == "" {
+		transaction.Status = "completed" // default to completed for regular transactions
+	}
+
 	result, err := s.collection.InsertOne(context.TODO(), transaction)
 	if err != nil {
 		return models.Transaction{}, err
@@ -366,6 +371,9 @@ func (t *TransactionService) UpdateTransaction(id primitive.ObjectID, tr models.
 	}
 	if tr.Description != "" {
 		updateFields["description"] = tr.Description
+	}
+	if tr.Status != "" {
+		updateFields["status"] = tr.Status
 	}
 
 	if len(updateFields) == 0 {

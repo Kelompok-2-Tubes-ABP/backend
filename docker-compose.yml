@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: financeapi_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: mydb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - financeapi_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # Database Seeder (runs once on startup)
+  seeder:
+    build:
+      context: .
+      dockerfile: Dockerfile.seed
+    container_name: financeapi_seeder
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financeapi_network
+    restart: "no"
+
+  # FinanceAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: financeapi_api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - JWT_SECRET=dev-secret-change-in-production-32chars
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - OPENAI_API_KEY=
+      - GECKO_API_KEY=
+      - FINNHUB_API_KEY=
+      # MongoDB connection (uses internal Docker network)
+      - MONGO_URI=mongodb://mongodb:27017
+    depends_on:
+      seeder:
+        condition: service_completed_successfully
+      mongodb:
+        condition: service_healthy
+    networks:
+      - financeapi_network
+    # For Mac/Windows: access host Ollama
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  financeapi_network:
+    driver: bridge

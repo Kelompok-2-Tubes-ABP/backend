@@ -125,5 +125,10 @@ func main() {
 	routes.RegisterInsightRoutes(router, spendingInsightService)
 	routes.RegisterAdminRoutes(router, adminService, userService)
 
+	// Serve testing UI on root
+	router.GET("/", func(c *gin.Context) {
+		c.File("./public/index.html")
+	})
+
 	router.Run()
 }

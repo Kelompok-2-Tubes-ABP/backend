@@ -41,6 +41,43 @@ func NewAdminService(client *mongo.Client, dbName string) *AdminService {
 		adminCollection:          db.Collection("admins"),
 	}
 }
+func (s *AdminService) GetCurrentUser(id primitive.ObjectID) (models.Admin, error) {
+	var admin models.Admin
+	err := s.adminCollection.FindOne(context.TODO(), bson.M{"_id": id}).Decode(&admin)
+	if err != nil {
+		return models.Admin{}, errors.New("admin not found")
+	}
+	return admin, nil
+}
+func (s *AdminService) ChangeAdminPassword(id primitive.ObjectID, currentPassword string, newPassword string) error {
+	currentAdmin, err := s.GetCurrentUser(id)
+	if err != nil {
+		return errors.New("admin not found")
+	}
+
+	if !utils.CheckPassword(currentPassword, currentAdmin.Password) {
+		return errors.New("current password is incorrect")
+	}
+
+	hashedPassword, err := utils.HashPassword(newPassword)
+	if err != nil {
+		return errors.New("failed to hash password")
+	}
+
+	_, err = s.adminCollection.UpdateOne(
+		context.TODO(),
+		bson.M{"_id": currentAdmin.ID},
+		bson.M{"$set": bson.M{
+			"password":            hashedPassword,
+			"password_changed_at": time.Now(),
+		}},
+	)
+	if err != nil {
+		return errors.New("failed to update password")
+	}
+
+	return nil
+}
 
 // GetDashboardStats returns data for the main admin dashboard
 func (s *AdminService) GetDashboardStats() (map[string]interface{}, error) {
@@ -435,6 +472,23 @@ func (s *AdminService) DeleteTransaction(txIDStr string) error {
 	return err
 }
 
+// UpdateTransactionStatus updates the status of a transaction
+func (s *AdminService) UpdateTransactionStatus(txIDStr string, status string) error {
+	id, err := primitive.ObjectIDFromHex(txIDStr)
+	if err != nil {
+		return err
+	}
+
+	update := bson.M{
+		"$set": bson.M{
+			"status": status,
+		},
+	}
+
+	_, err = s.transactionCollection.UpdateOne(context.TODO(), bson.M{"_id": id}, update)
+	return err
+}
+
 // GetAlertStats returns counts for alerts and logs
 func (s *AdminService) GetAlertStats() (map[string]interface{}, error) {
 	totalAlerts, err := s.alertCollection.CountDocuments(context.TODO(), bson.M{"type": "system_alert"})
@@ -627,19 +681,13 @@ func (s *AdminService) GetBudgetSavingsStats() (map[string]interface{}, error) {
 	}
 
 	// Calculate over budget count (global)
-	// This is a bit complex as we need to compare spent with limit across all users
-	// For simplicity in this demo, let's use a simpler count or aggregation
-	overBudgetCount := 0
-	cursor, err := s.categoryBudgetCollection.Find(context.TODO(), bson.M{})
-	if err == nil {
-		var budgets []models.CategoryBudget
-		cursor.All(context.TODO(), &budgets)
-		for _, b := range budgets {
-			if b.Spent > b.Limit {
-				overBudgetCount++
-			}
-		}
+	filter := bson.M{
+		"$expr": bson.M{
+			"$gt": bson.A{"$spent", "$limit"},
+		},
 	}
+
+	overBudgetCount, _ := s.categoryBudgetCollection.CountDocuments(context.TODO(), filter)
 
 	return map[string]interface{}{
 		"total_budgets": totalBudgets,
@@ -930,18 +978,29 @@ func (s *AdminService) GetAllTransactions(page, limit int, search string) ([]map
 		if objID, err := primitive.ObjectIDFromHex(tx.User_id); err == nil {
 			s.userCollection.FindOne(context.TODO(), bson.M{"_id": objID}).Decode(&user)
 		}
-		
+
 		userName := user.Username
 		if userName == "" {
 			userName = "Unknown User"
 		}
-
+		if tx.Status != "" && tx.Status != "All Status" {
+			if tx.Status == "Active" {
+				filter["is_active"] = true
+				filter["is_email_verified"] = true
+			} else if tx.Status == "Disabled" {
+				filter["is_active"] = false
+			} else if tx.Status == "Pending" {
+				filter["is_active"] = true
+				filter["is_email_verified"] = false
+			}
+		}
 		result = append(result, map[string]interface{}{
 			"id":          tx.ID.Hex(),
 			"user_name":   userName,
 			"amount":      tx.Amount,
 			"category":    tx.Category,
 			"description": tx.Description,
+			"status":      tx.Status,
 			"date":        tx.Date.Format("2006-01-02"),
 		})
 	}

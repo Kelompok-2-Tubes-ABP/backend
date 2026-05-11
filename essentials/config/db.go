@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -12,7 +13,12 @@ import (
 )
 
 func ConnectDB() *mongo.Client {
-	mongoURI := "mongodb+srv://foxyninenineee:akame112@clusterfinanceapi.ccf3ywa.mongodb.net/?appName=ClusterFinanceApi"
+	// Check for environment variable first (for Docker), fallback to hardcoded
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		// Hardcoded for development - in production, use MONGO_URI env var
+		mongoURI = "mongodb+srv://foxyninenineee:akame112@clusterfinanceapi.ccf3ywa.mongodb.net/?appName=ClusterFinanceApi"
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

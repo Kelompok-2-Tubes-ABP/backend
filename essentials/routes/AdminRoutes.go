@@ -29,6 +29,7 @@ func RegisterAdminRoutes(r *gin.Engine, adminService *services.AdminService, use
 		// Transaction Management
 		adminGroup.GET("/transactions/recent", adminHandler.GetRecentTransactions)
 		adminGroup.GET("/transactions/all", adminHandler.GetAllTransactions)
+		adminGroup.PATCH("/transactions/:id/status", adminHandler.UpdateTransactionStatus)
 		adminGroup.DELETE("/transactions/:id", adminHandler.DeleteTransaction)
 
 		// Alerts & Logs

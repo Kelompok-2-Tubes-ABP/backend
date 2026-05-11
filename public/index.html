@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinanceAPI Tester</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit', 'sans-serif'] },
+                    colors: {
+                        dark: {
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                        },
+                        brand: {
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { 
+            background: radial-gradient(circle at top right, #1e293b, #0f172a); 
+            color: #f8fafc;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .btn-glow {
+            transition: all 0.3s ease;
+        }
+        .btn-glow:hover {
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.6);
+            transform: translateY(-2px);
+        }
+        pre {
+            background: rgba(15, 23, 42, 0.8) !important;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex flex-col md:flex-row gap-8">
+    
+    <!-- Sidebar / Auth Section -->
+    <div class="w-full md:w-1/3 flex flex-col gap-6">
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-400 flex items-center justify-center shadow-lg shadow-brand-500/30">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                </div>
+                <h1 class="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">FinanceAPI</h1>
+            </div>
+
+            <h2 class="text-lg font-semibold text-slate-200 mb-4">Admin Authentication</h2>
+            
+            <form id="loginForm" class="flex flex-col gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Email Address</label>
+                    <input type="email" id="email" value="admin@financeapi.com" class="w-full bg-dark-900/50 border border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all text-slate-200" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Password</label>
+                    <input type="password" id="password" value="Admin123!" class="w-full bg-dark-900/50 border border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all text-slate-200" required>
+                </div>
+                <button type="submit" class="mt-2 w-full bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-medium py-2.5 rounded-lg btn-glow flex justify-center items-center gap-2">
+                    <span>Authenticate</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                </button>
+            </form>
+
+            <div class="mt-6">
+                <label class="block text-xs font-medium text-slate-400 mb-1 uppercase tracking-wider">Active Token</label>
+                <div class="relative">
+                    <input type="text" id="token" placeholder="Login to get token..." class="w-full bg-dark-900/80 border border-slate-700 rounded-lg pl-4 pr-10 py-2.5 text-xs text-brand-400 font-mono focus:outline-none" readonly>
+                    <div id="statusIndicator" class="absolute right-3 top-3 w-2.5 h-2.5 rounded-full bg-slate-600"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6 flex-1 flex flex-col max-h-[calc(100vh-4rem)]">
+            <h2 class="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Admin Endpoints
+            </h2>
+            <div class="flex flex-col gap-2 overflow-y-auto pr-2 flex-1" id="endpointList">
+                <button onclick="testEndpoint('GET', '/admin/dashboard')" class="text-left px-3 py-2 rounded-lg bg-dark-800/50 hover:bg-dark-700 border border-slate-700/50 hover:border-brand-500/30 transition-all group shrink-0">
+                    <div class="text-sm font-medium text-slate-200 group-hover:text-brand-400 transition-colors">Dashboard Stats</div>
+                    <div class="text-xs text-slate-500 font-mono">GET /admin/dashboard</div>
+                </button>
+                <button onclick="testEndpoint('GET', '/admin/users')" class="text-left px-3 py-2 rounded-lg bg-dark-800/50 hover:bg-dark-700 border border-slate-700/50 hover:border-brand-500/30 transition-all group shrink-0">
+                    <div class="text-sm font-medium text-slate-200 group-hover:text-brand-400 transition-colors">List All Users</div>
+                    <div class="text-xs text-slate-500 font-mono">GET /admin/users</div>
+                </button>
+                <button onclick="testEndpoint('GET', '/admin/transactions/recent')" class="text-left px-3 py-2 rounded-lg bg-dark-800/50 hover:bg-dark-700 border border-slate-700/50 hover:border-brand-500/30 transition-all group shrink-0">
+                    <div class="text-sm font-medium text-slate-200 group-hover:text-brand-400 transition-colors">Recent Transactions</div>
+                    <div class="text-xs text-slate-500 font-mono">GET /admin/transactions/recent</div>
+                </button>
+                <button onclick="testEndpoint('GET', '/admin/transactions/all')" class="text-left px-3 py-2 rounded-lg bg-dark-800/50 hover:bg-dark-700 border border-slate-700/50 hover:border-brand-500/30 transition-all group shrink-0">
+                    <div class="text-sm font-medium text-slate-200 group-hover:text-brand-400 transition-colors">All Transactions</div>
+                    <div class="text-xs text-slate-500 font-mono">GET /admin/transactions/all</div>
+                </button>
+                <button onclick="testEndpoint('GET', '/admin/alerts/stats')" class="text-left px-3 py-2 rounded-lg bg-dark-800/50 hover:bg-dark-700 border border-slate-700/50 hover:border-brand-500/30 transition-all group shrink-0">
+                    <div class="text-sm font-medium text-slate-200 group-hover:text-brand-400 transition-colors">Alert Statistics</div>
+                    <div class="text-xs text-slate-500 font-mono">GET /admin/alerts/stats</div>
+                </button>
+                <button onclick="testEndpoint('GET', '/admin/alerts')" class="text-left px-3 py-2 rounded-lg bg-dark-800/50 hover:bg-dark-700 border border-slate-700/50 hover:border-brand-500/30 transition-all group shrink-0">
+                    <div class="text-sm font-medium text-slate-200 group-hover:text-brand-400 transition-colors">List Alerts</div>
+                    <div class="text-xs text-slate-500 font-mono">GET /admin/alerts</div>
+                </button>
+                <button onclick="testEndpoint('GET', '/admin/audit-logs/stats')" class="text-left px-3 py-2 rounded-lg bg-dark-800/50 hover:bg-dark-700 border border-slate-700/50 hover:border-brand-500/30 transition-all group shrink-0">
+                    <div class="text-sm font-medium text-slate-200 group-hover:text-brand-400 transition-colors">Audit Log Stats</div>
+                    <div class="text-xs text-slate-500 font-mono">GET /admin/audit-logs/stats</div>
+                </button>
+                <button onclick="testEndpoint('GET', '/admin/audit-logs')" class="text-left px-3 py-2 rounded-lg bg-dark-800/50 hover:bg-dark-700 border border-slate-700/50 hover:border-brand-500/30 transition-all group shrink-0">
+                    <div class="text-sm font-medium text-slate-200 group-hover:text-brand-400 transition-colors">List Audit Logs</div>
+                    <div class="text-xs text-slate-500 font-mono">GET /admin/audit-logs</div>
+                </button>
+                <button onclick="testEndpoint('GET', '/admin/budget-savings/stats')" class="text-left px-3 py-2 rounded-lg bg-dark-800/50 hover:bg-dark-700 border border-slate-700/50 hover:border-brand-500/30 transition-all group shrink-0">
+                    <div class="text-sm font-medium text-slate-200 group-hover:text-brand-400 transition-colors">Budget & Savings Stats</div>
+                    <div class="text-xs text-slate-500 font-mono">GET /admin/budget-savings/stats</div>
+                </button>
+                <button onclick="testEndpoint('GET', '/admin/investments/stats')" class="text-left px-3 py-2 rounded-lg bg-dark-800/50 hover:bg-dark-700 border border-slate-700/50 hover:border-brand-500/30 transition-all group shrink-0">
+                    <div class="text-sm font-medium text-slate-200 group-hover:text-brand-400 transition-colors">Investment Stats</div>
+                    <div class="text-xs text-slate-500 font-mono">GET /admin/investments/stats</div>
+                </button>
+            </div>
+            
+            <div class="mt-4 border-t border-slate-700/50 pt-4 shrink-0">
+                <label class="block text-xs font-medium text-slate-400 mb-2 uppercase tracking-wider">Custom Endpoint Test</label>
+                <div class="flex gap-2">
+                    <select id="customMethod" class="bg-dark-900/80 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500">
+                        <option>GET</option>
+                        <option>POST</option>
+                        <option>PATCH</option>
+                        <option>DELETE</option>
+                    </select>
+                    <input type="text" id="customPath" placeholder="/admin/..." class="flex-1 bg-dark-900/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-brand-500 font-mono">
+                    <button onclick="testCustomEndpoint()" class="bg-slate-700 hover:bg-brand-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </button>
+                </div>
+                <input type="text" id="customBody" placeholder='{"JSON Body (Optional)": ""}' class="mt-2 w-full bg-dark-900/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-500 font-mono hidden">
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content / Response Console -->
+    <div class="w-full md:w-2/3 flex flex-col gap-4">
+        <div class="glass-panel rounded-2xl flex-1 flex flex-col overflow-hidden max-h-[calc(100vh-4rem)]">
+            <div class="bg-dark-900/50 px-6 py-4 border-b border-slate-700/50 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="flex gap-1.5">
+                        <div class="w-3 h-3 rounded-full bg-slate-600"></div>
+                        <div class="w-3 h-3 rounded-full bg-slate-600"></div>
+                        <div class="w-3 h-3 rounded-full bg-slate-600"></div>
+                    </div>
+                    <h3 class="text-sm font-medium text-slate-300 ml-2 font-mono" id="requestUrl">Response Console</h3>
+                </div>
+                <div id="responseTime" class="text-xs font-mono text-slate-500"></div>
+            </div>
+            <div class="p-0 flex-1 relative bg-[#0f172a] overflow-hidden">
+                <pre id="responseOutput" class="w-full h-full p-6 text-sm font-mono text-slate-300 overflow-auto m-0 border-0"><code>Awaiting requests...</code></pre>
+                
+                <!-- Loading overlay -->
+                <div id="loader" class="absolute inset-0 bg-dark-900/80 backdrop-blur-sm hidden flex-col items-center justify-center">
+                    <svg class="w-10 h-10 text-brand-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p class="text-brand-400 text-sm mt-3 font-medium animate-pulse">Processing request...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Toggle JSON body input for custom requests
+        document.getElementById('customMethod').addEventListener('change', (e) => {
+            const bodyInput = document.getElementById('customBody');
+            if (e.target.value === 'POST' || e.target.value === 'PATCH' || e.target.value === 'PUT') {
+                bodyInput.classList.remove('hidden');
+            } else {
+                bodyInput.classList.add('hidden');
+            }
+        });
+
+        function testCustomEndpoint() {
+            const method = document.getElementById('customMethod').value;
+            const path = document.getElementById('customPath').value;
+            const bodyStr = document.getElementById('customBody').value;
+            let body = undefined;
+            
+            if (!path) {
+                alert('Please enter an endpoint path');
+                return;
+            }
+            
+            if (!document.getElementById('customBody').classList.contains('hidden') && bodyStr) {
+                try {
+                    body = JSON.parse(bodyStr);
+                } catch(e) {
+                    alert('Invalid JSON in body field');
+                    return;
+                }
+            }
+            
+            testEndpoint(method, path, body);
+        }
+
+        let currentToken = '';
+
+        function updateOutput(json, timeMs = null, isError = false) {
+            const output = document.getElementById('responseOutput');
+            output.innerHTML = syntaxHighlight(JSON.stringify(json, null, 2));
+            if (timeMs) {
+                document.getElementById('responseTime').innerText = `${timeMs}ms ${isError ? '• Error' : '• 200 OK'}`;
+                document.getElementById('responseTime').className = `text-xs font-mono ${isError ? 'text-red-400' : 'text-emerald-400'}`;
+            }
+        }
+
+        function syntaxHighlight(json) {
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'text-brand-400'; // number
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'text-slate-300 font-semibold'; // key
+                    } else {
+                        cls = 'text-emerald-400'; // string
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'text-purple-400'; // boolean
+                } else if (/null/.test(match)) {
+                    cls = 'text-slate-500'; // null
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        function showLoader(show) {
+            document.getElementById('loader').classList.toggle('hidden', !show);
+            document.getElementById('loader').classList.toggle('flex', show);
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            showLoader(true);
+            document.getElementById('requestUrl').innerText = 'POST /admin/login';
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            const start = performance.now();
+            try {
+                const res = await fetch('/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                const end = performance.now();
+                
+                updateOutput(data, Math.round(end - start), !res.ok);
+                
+                if (data.token) {
+                    currentToken = data.token;
+                    document.getElementById('token').value = data.token.substring(0, 20) + '...';
+                    document.getElementById('statusIndicator').classList.replace('bg-slate-600', 'bg-emerald-500');
+                    document.getElementById('statusIndicator').classList.add('shadow-[0_0_8px_rgba(16,185,129,0.8)]');
+                }
+            } catch (err) {
+                updateOutput({ error: err.message }, null, true);
+            }
+            showLoader(false);
+        });
+
+        async function testEndpoint(method, path, body = null) {
+            if (!currentToken) {
+                updateOutput({ error: "Please login first to get a token" }, null, true);
+                return;
+            }
+            
+            showLoader(true);
+            document.getElementById('requestUrl').innerText = `${method} ${path}`;
+            const start = performance.now();
+            
+            try {
+                const options = {
+                    method: method,
+                    headers: { 
+                        'Authorization': `Bearer ${currentToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                };
+                
+                if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+                    options.body = JSON.stringify(body);
+                }
+
+                const res = await fetch(path, options);
+                let data;
+                try {
+                    data = await res.json();
+                } catch(e) {
+                    data = { message: "No JSON response" };
+                }
+                const end = performance.now();
+                updateOutput(data, Math.round(end - start), !res.ok);
+            } catch (err) {
+                updateOutput({ error: err.message }, null, true);
+            }
+            showLoader(false);
+        }
+    </script>
+</body>
+</html>

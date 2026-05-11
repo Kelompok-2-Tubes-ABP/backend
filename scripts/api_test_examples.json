@@ -1,0 +1,603 @@
+{
+  "info": {
+    "title": "FinanceAPI - Admin Endpoints Test Guide",
+    "description": "Pre-populated test data for frontend developers to test all admin endpoints immediately",
+    "version": "1.0.0"
+  },
+  "baseUrl": "http://localhost:8080",
+  "authentication": {
+    "admin": {
+      "email": "admin@financeapi.com",
+      "password": "Admin123!"
+    },
+    "user": {
+      "email": "john@example.com",
+      "password": "User123!"
+    }
+  },
+  "endpoints": {
+    "admin_login": {
+      "method": "POST",
+      "url": "/admin/login",
+      "auth": false,
+      "requestBody": {
+        "email": "admin@financeapi.com",
+        "password": "Admin123!"
+      },
+      "expectedResponse": {
+        "status": "success",
+        "token": "<jwt_token>",
+        "expires_in": 7200,
+        "token_type": "Bearer",
+        "admin": {
+          "id": "<admin_id>",
+          "username": "admin",
+          "email": "admin@financeapi.com"
+        }
+      },
+      "testNote": "Use the returned token as Bearer token for all protected endpoints"
+    },
+    "admin_logout": {
+      "method": "POST",
+      "url": "/admin/logout",
+      "auth": true,
+      "requestBody": {},
+      "expectedResponse": {
+        "status": "success",
+        "message": "Admin logged out successfully"
+      }
+    },
+    "change_admin_password": {
+      "method": "POST",
+      "url": "/admin/password",
+      "auth": true,
+      "requestBody": {
+        "current_password": "Admin123!",
+        "new_password": "NewAdmin123!"
+      },
+      "expectedResponse": {
+        "status": "success",
+        "message": "Admin password changed successfully"
+      },
+      "testNote": "After test, revert password back to Admin123! for continued testing"
+    },
+    "get_dashboard_stats": {
+      "method": "GET",
+      "url": "/admin/dashboard",
+      "auth": true,
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": {
+          "quick_stats": {
+            "total_users": { "value": "<number>", "change_percent": "<percentage>" },
+            "total_transactions": { "value": "<number>", "change_percent": "<percentage>" },
+            "total_revenue": { "value": "<number>", "change_percent": "<percentage>" },
+            "active_sessions": { "value": "<number>", "change_percent": "<percentage>" }
+          },
+          "chart_data": [],
+          "top_categories": [],
+          "recent_activities": []
+        }
+      }
+    },
+    "get_users": {
+      "method": "GET",
+      "url": "/admin/users",
+      "auth": true,
+      "queryParams": {
+        "page": 1,
+        "limit": 10,
+        "search": "",
+        "status": ""
+      },
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": [
+          {
+            "id": "<user_id>",
+            "name": "johndoe",
+            "email": "john@example.com",
+            "status": "Active",
+            "join_date": "2024-01-15",
+            "balance": 15000000
+          }
+        ],
+        "meta": {
+          "total": 5,
+          "page": 1,
+          "limit": 10
+        }
+      },
+      "testQueries": [
+        { "status": "Active", "description": "Filter active users" },
+        { "status": "Disabled", "description": "Filter disabled users" },
+        { "status": "Pending", "description": "Filter pending verification users" },
+        { "search": "john", "description": "Search by username or email" }
+      ]
+    },
+    "get_user_detail": {
+      "method": "GET",
+      "url": "/admin/users/{user_id}",
+      "auth": true,
+      "pathParams": {
+        "user_id": "<get_from_get_users_response>"
+      },
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": {
+          "user": {
+            "id": "<user_id>",
+            "username": "johndoe",
+            "email": "john@example.com",
+            "role": "user",
+            "is_active": true,
+            "is_email_verified": true,
+            "created_at": "<timestamp>"
+          },
+          "total_transactions": "<number>",
+          "recent_transactions": []
+        }
+      }
+    },
+    "disable_user": {
+      "method": "PATCH",
+      "url": "/admin/users/{user_id}/disable",
+      "auth": true,
+      "pathParams": {
+        "user_id": "<user_id_to_disable>"
+      },
+      "requestBody": {},
+      "expectedResponse": {
+        "status": "success",
+        "message": "User disabled successfully"
+      },
+      "testNote": "User will no longer be able to login after this"
+    },
+    "delete_user": {
+      "method": "DELETE",
+      "url": "/admin/users/{user_id}",
+      "auth": true,
+      "pathParams": {
+        "user_id": "<user_id_to_delete>"
+      },
+      "requestBody": {},
+      "expectedResponse": {
+        "status": "success",
+        "message": "User deleted successfully"
+      },
+      "testNote": "This permanently deletes the user - use with caution in testing"
+    },
+    "get_recent_transactions": {
+      "method": "GET",
+      "url": "/admin/transactions/recent",
+      "auth": true,
+      "queryParams": {
+        "from_date": "",
+        "to_date": "",
+        "limit": 20
+      },
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": [
+          {
+            "id": "<transaction_id>",
+            "user_id": "<user_id>",
+            "amount": 45000,
+            "category": "food",
+            "description": "Lunch at Nasi Padang",
+            "date": "<timestamp>",
+            "month": "2024-04",
+            "status": "completed"
+          }
+        ]
+      },
+      "testQueries": [
+        { "from_date": "2024-04-01", "to_date": "2024-04-07", "description": "Filter by date range" },
+        { "limit": 50, "description": "Get more transactions" }
+      ]
+    },
+    "get_all_transactions": {
+      "method": "GET",
+      "url": "/admin/transactions/all",
+      "auth": true,
+      "queryParams": {
+        "page": 1,
+        "limit": 10,
+        "search": ""
+      },
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": [
+          {
+            "id": "<transaction_id>",
+            "user_name": "johndoe",
+            "amount": 45000,
+            "category": "food",
+            "description": "Lunch at Nasi Padang",
+            "status": "completed",
+            "date": "2024-04-07"
+          }
+        ],
+        "meta": {
+          "total": "<number>",
+          "page": 1,
+          "limit": 10
+        }
+      }
+    },
+    "update_transaction_status": {
+      "method": "PATCH",
+      "url": "/admin/transactions/{transaction_id}/status",
+      "auth": true,
+      "pathParams": {
+        "transaction_id": "<get_from_get_transactions>"
+      },
+      "requestBody": {
+        "status": "pending"
+      },
+      "expectedResponse": {
+        "status": "success",
+        "message": "Transaction status updated successfully"
+      },
+      "validStatusValues": ["pending", "completed", "failed"],
+      "testNote": "Only accepts: pending, completed, or failed"
+    },
+    "delete_transaction": {
+      "method": "DELETE",
+      "url": "/admin/transactions/{transaction_id}",
+      "auth": true,
+      "pathParams": {
+        "transaction_id": "<transaction_id_to_delete>"
+      },
+      "requestBody": {},
+      "expectedResponse": {
+        "status": "success",
+        "message": "Transaction deleted successfully"
+      }
+    },
+    "get_alert_stats": {
+      "method": "GET",
+      "url": "/admin/alerts/stats",
+      "auth": true,
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": {
+          "total_alerts": "<number>",
+          "failed_actions": "<number>",
+          "unread": "<number>",
+          "can_retry": "<number>"
+        }
+      }
+    },
+    "get_alerts": {
+      "method": "GET",
+      "url": "/admin/alerts",
+      "auth": true,
+      "queryParams": {
+        "type": "",
+        "page": 1,
+        "limit": 10
+      },
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": [
+          {
+            "id": "<alert_id>",
+            "type": "system_alert",
+            "title": "High Error Rate Detected",
+            "description": "Server error rate exceeded threshold",
+            "is_read": false,
+            "can_retry": false,
+            "created_at": "<timestamp>"
+          }
+        ],
+        "meta": {
+          "total": "<number>",
+          "page": 1,
+          "limit": 10
+        }
+      },
+      "testQueries": [
+        { "type": "system_alert", "description": "Filter system alerts only" },
+        { "type": "failed_action", "description": "Filter failed actions only" }
+      ]
+    },
+    "mark_alert_as_read": {
+      "method": "PATCH",
+      "url": "/admin/alerts/{alert_id}/read",
+      "auth": true,
+      "pathParams": {
+        "alert_id": "<alert_id>"
+      },
+      "requestBody": {},
+      "expectedResponse": {
+        "status": "success",
+        "message": "Alert marked as read"
+      }
+    },
+    "get_audit_log_stats": {
+      "method": "GET",
+      "url": "/admin/audit-logs/stats",
+      "auth": true,
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": {
+          "total_logs": "<number>",
+          "admin_actions": "<number>",
+          "user_actions": "<number>",
+          "delete_actions": "<number>"
+        }
+      }
+    },
+    "get_audit_logs": {
+      "method": "GET",
+      "url": "/admin/audit-logs",
+      "auth": true,
+      "queryParams": {
+        "page": 1,
+        "limit": 10,
+        "search": "",
+        "actionType": "",
+        "actorRole": ""
+      },
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": [
+          {
+            "id": "<log_id>",
+            "timestamp": "<timestamp>",
+            "actor_id": "<admin_id>",
+            "actor_name": "admin",
+            "actor_role": "admin",
+            "action_type": "Update",
+            "target_data": "User Account #<user_id>",
+            "ip_address": "192.168.1.1",
+            "details": "Disabled user account access"
+          }
+        ],
+        "meta": {
+          "total": "<number>",
+          "page": 1,
+          "limit": 10
+        }
+      },
+      "testQueries": [
+        { "actionType": "Login", "description": "Filter login actions" },
+        { "actionType": "Delete", "description": "Filter delete actions" },
+        { "actorRole": "admin", "description": "Filter admin actions" },
+        { "search": "johndoe", "description": "Search by actor name" }
+      ]
+    },
+    "export_audit_logs": {
+      "method": "GET",
+      "url": "/admin/audit-logs/export",
+      "auth": true,
+      "requestBody": null,
+      "expectedResponse": "CSV file download",
+      "expectedMimeType": "text/csv",
+      "csvHeaders": ["Timestamp", "Actor Name", "Actor Role", "Action Type", "Target Data", "IP Address", "Details"]
+    },
+    "get_budget_savings_stats": {
+      "method": "GET",
+      "url": "/admin/budget-savings/stats",
+      "auth": true,
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": {
+          "total_budgets": "<number>",
+          "over_budget": "<number>",
+          "savings_goals": "<number>"
+        }
+      }
+    },
+    "get_all_user_budgets": {
+      "method": "GET",
+      "url": "/admin/budgets",
+      "auth": true,
+      "queryParams": {
+        "page": 1,
+        "limit": 10
+      },
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": [
+          {
+            "user_name": "johndoe",
+            "category": "food",
+            "month": "2024-04",
+            "spent": 1800000,
+            "limit": 2000000,
+            "remaining": 200000,
+            "percentage_used": 90.0,
+            "status": "Near Limit"
+          }
+        ],
+        "meta": {
+          "total": "<number>",
+          "page": 1,
+          "limit": 10
+        }
+      }
+    },
+    "get_all_user_savings_goals": {
+      "method": "GET",
+      "url": "/admin/savings-goals",
+      "auth": true,
+      "queryParams": {
+        "page": 1,
+        "limit": 10
+      },
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": [
+          {
+            "user_name": "johndoe",
+            "goal_name": "Vacation to Japan",
+            "target_date": "2024-12-31",
+            "current_amount": 5000000,
+            "target_amount": 15000000,
+            "percentage_used": 33.3,
+            "status": "On track"
+          }
+        ],
+        "meta": {
+          "total": "<number>",
+          "page": 1,
+          "limit": 10
+        }
+      }
+    },
+    "get_investment_stats": {
+      "method": "GET",
+      "url": "/admin/investments/stats",
+      "auth": true,
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": {
+          "total_invested": "<number>",
+          "current_value": "<number>",
+          "total_gain_loss": "<number>",
+          "performance": "<percentage>"
+        }
+      }
+    },
+    "get_all_investments": {
+      "method": "GET",
+      "url": "/admin/investments",
+      "auth": true,
+      "queryParams": {
+        "page": 1,
+        "limit": 10,
+        "search": "",
+        "status": ""
+      },
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": [
+          {
+            "id": "<investment_id>",
+            "user_name": "johndoe",
+            "asset_name": "Bitcoin",
+            "asset_symbol": "BTC",
+            "invested": 50000000,
+            "current_value": 65000000,
+            "change_percent": 30.0,
+            "status": "Active",
+            "date": "2024-01-15"
+          }
+        ],
+        "meta": {
+          "total": "<number>",
+          "page": 1,
+          "limit": 10
+        }
+      },
+      "testQueries": [
+        { "status": "Active", "description": "Filter active investments" },
+        { "status": "Closed", "description": "Filter closed investments" },
+        { "search": "BTC", "description": "Search by symbol" }
+      ]
+    },
+    "export_investments": {
+      "method": "GET",
+      "url": "/admin/investments/export",
+      "auth": true,
+      "requestBody": null,
+      "expectedResponse": "CSV file download",
+      "expectedMimeType": "text/csv",
+      "csvHeaders": ["ID", "User", "Asset Name", "Asset Symbol", "Invested", "Current Value", "Change %", "Status", "Date"]
+    },
+    "get_analytics_reports": {
+      "method": "GET",
+      "url": "/admin/analytics",
+      "auth": true,
+      "requestBody": null,
+      "expectedResponse": {
+        "status": "success",
+        "data": {
+          "top_spenders": [
+            { "name": "johndoe", "total_spent": 25000000 }
+          ],
+          "category_distribution": [
+            { "_id": "food", "amount": 45000000, "percentage": 35.0 }
+          ],
+          "user_growth_trend": [],
+          "price_trends": [],
+          "savings_progress": [],
+          "bottom_stats": {
+            "total_volume": 258450000,
+            "avg_transaction": 16750,
+            "total_users": 1280,
+            "success_rate": 97.3
+          }
+        }
+      }
+    },
+    "export_analytics_report": {
+      "method": "GET",
+      "url": "/admin/analytics/export",
+      "auth": true,
+      "requestBody": null,
+      "expectedResponse": "CSV file download",
+      "expectedMimeType": "text/csv"
+    }
+  },
+  "error_responses": {
+    "400_bad_request": {
+      "description": "Invalid request body or parameters",
+      "example": { "error": "Status must be pending, completed, or failed" }
+    },
+    "401_unauthorized": {
+      "description": "Missing or invalid authentication",
+      "example": { "error": "Unauthorized" }
+    },
+    "403_forbidden": {
+      "description": "Insufficient permissions (non-admin user)",
+      "example": { "error": "Forbidden: Requires admin privileges" }
+    },
+    "500_internal_error": {
+      "description": "Server error",
+      "example": { "error": "Failed to fetch users" }
+    }
+  },
+  "test_workflow": {
+    "step_1_admin_login": {
+      "instruction": "Login as admin to get Bearer token",
+      "copyTokenFrom": "$.admin_login.response.token"
+    },
+    "step_2_get_users": {
+      "instruction": "List all users to see seeded test data",
+      "useTokenFrom": "step_1"
+    },
+    "step_3_view_user_detail": {
+      "instruction": "Click on any user to view their details and transactions",
+      "useTokenFrom": "step_1"
+    },
+    "step_4_test_actions": {
+      "instruction": "Test disable/delete users, update transaction status",
+      "useTokenFrom": "step_1"
+    },
+    "step_5_check_dashboard": {
+      "instruction": "View dashboard statistics and charts",
+      "useTokenFrom": "step_1"
+    },
+    "step_6_export_data": {
+      "instruction": "Export audit logs and investments as CSV",
+      "useTokenFrom": "step_1"
+    }
+  }
+}
