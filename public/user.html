@@ -4,14 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FinanceAPI - Admin Endpoints</title>
+    <title>FinanceAPI - User Endpoints</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
             background: #0a0a0a;
             color: #f5f5f5;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Poppins', sans-serif;
         }
 
         .endpoint-card {
@@ -21,8 +21,8 @@
         }
 
         .endpoint-card:hover {
-            border-color: #3b82f6;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+            border-color: #9333ea;
+            box-shadow: 0 4px 12px rgba(147, 51, 234, 0.1);
         }
 
         .response-box {
@@ -33,7 +33,7 @@
         }
 
         .json-key {
-            color: #60a5fa;
+            color: #a78bfa;
         }
 
         .json-string {
@@ -45,7 +45,7 @@
         }
 
         .json-boolean {
-            color: #a78bfa;
+            color: #c084fc;
         }
 
         ::-webkit-scrollbar {
@@ -62,7 +62,7 @@
         }
 
         .tab-active {
-            background: #3b82f6;
+            background: #9333ea;
             color: white;
         }
 
@@ -73,7 +73,7 @@
         }
 
         .filter-active {
-            background: #3b82f6 !important;
+            background: #9333ea !important;
             color: white !important;
         }
     </style>
@@ -85,78 +85,69 @@
         <!-- Header -->
         <div class="flex items-center justify-between mb-8">
             <div>
-                <h1 class="text-3xl font-bold text-white mb-1">Admin Endpoints</h1>
-                <p class="text-gray-400 text-sm">Testing ground buat admin endpoints</p>
+                <h1 class="text-3xl font-bold text-white mb-1">User Endpoints</h1>
+                <p class="text-gray-400 text-sm">Testing ground buat user endpoints</p>
             </div>
             <div class="flex items-center gap-3">
                 <button onclick="toggleAllResponses()" id="toggleAllBtn"
                     class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-medium transition-all">
                     Expand All
                 </button>
-                <a href="/user-test"
-                    class="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-all text-sm">
-                    User Endpoints →
+                <a href="/"
+                    class="px-5 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-medium transition-all text-sm">
+                    ← Admin Endpoints
                 </a>
             </div>
         </div>
 
         <!-- Auth -->
-        <div class="bg-gradient-to-r from-blue-600/10 to-blue-500/10 border border-blue-500/20 rounded-xl p-6 mb-8">
-            <h2 class="text-lg font-semibold mb-4 text-white">Login Admin</h2>
+        <div
+            class="bg-gradient-to-r from-purple-600/10 to-purple-500/10 border border-purple-500/20 rounded-xl p-6 mb-8">
+            <h2 class="text-lg font-semibold mb-4 text-white">Login User</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <input type="email" id="adminEmail" value="admin@financeapi.com"
+                <input type="email" id="userEmail" value="john@example.com"
                     class="bg-black/50 border border-gray-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500"
                     placeholder="Email">
-                <input type="password" id="adminPassword" value="Admin123!"
+                <input type="password" id="userPassword" value="User123!"
                     class="bg-black/50 border border-gray-800 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-500"
                     placeholder="Password">
-                <button onclick="adminLogin()"
-                    class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 rounded-lg transition-all text-sm">
+                <button onclick="userLogin()"
+                    class="bg-purple-600 hover:bg-purple-500 text-white font-medium py-2.5 rounded-lg transition-all text-sm">
                     Login
                 </button>
             </div>
             <div class="mt-4">
                 <label class="text-xs text-gray-500 block mb-1.5">Token:</label>
-                <input type="text" id="adminToken" readonly
-                    class="w-full bg-black/50 border border-gray-800 rounded-lg px-4 py-2 text-xs font-mono text-blue-400"
+                <input type="text" id="userToken" readonly
+                    class="w-full bg-black/50 border border-gray-800 rounded-lg px-4 py-2 text-xs font-mono text-purple-400"
                     placeholder="Login to get token...">
             </div>
         </div>
 
         <!-- Tabs -->
         <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
-            <button onclick="switchTab('dashboard')" id="tab-dashboard"
-                class="tab-active px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
-                Dashboard
-            </button>
-            <button onclick="switchTab('users')" id="tab-users"
-                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
-                Users
-            </button>
+            <button onclick="switchTab('profile')" id="tab-profile"
+                class="tab-active px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Profile</button>
+            <button onclick="switchTab('accounts')" id="tab-accounts"
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Accounts</button>
             <button onclick="switchTab('transactions')" id="tab-transactions"
-                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
-                Transactions
-            </button>
-            <button onclick="switchTab('alerts')" id="tab-alerts"
-                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
-                Alerts
-            </button>
-            <button onclick="switchTab('audit')" id="tab-audit"
-                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
-                Audit Logs
-            </button>
-            <button onclick="switchTab('monitoring')" id="tab-monitoring"
-                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
-                Monitoring
-            </button>
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Transactions</button>
+            <button onclick="switchTab('budgets')" id="tab-budgets"
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Budgets</button>
+            <button onclick="switchTab('savings')" id="tab-savings"
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Savings</button>
+            <button onclick="switchTab('investments')" id="tab-investments"
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Investments</button>
+            <button onclick="switchTab('debts')" id="tab-debts"
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Debts</button>
+            <button onclick="switchTab('bills')" id="tab-bills"
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Bills</button>
+            <button onclick="switchTab('recurring')" id="tab-recurring"
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Recurring</button>
             <button onclick="switchTab('analytics')" id="tab-analytics"
-                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
-                Analytics
-            </button>
-            <button onclick="switchTab('settings')" id="tab-settings"
-                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
-                Settings
-            </button>
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Analytics</button>
+            <button onclick="switchTab('other')" id="tab-other"
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Other</button>
         </div>
 
         <!-- Search & Filter -->
@@ -204,7 +195,7 @@
     </div>
 
     <script>
-        let adminToken = '';
+        let userToken = '';
         let currentPage = 1;
         let pageSize = 12;
         let methodFilter = 'all';
@@ -213,46 +204,115 @@
         let isAllExpanded = false;
 
         const endpoints = {
-            dashboard: [
-                { method: 'GET', path: '/admin/dashboard', name: 'Dashboard Stats' }
+            profile: [
+                { method: 'GET', path: '/profile/', name: 'Get Profile' },
+                { method: 'POST', path: '/auth/register', name: 'Register', body: { name: 'Jane Doe', email: 'jane@example.com', password: 'User123!', username: 'janedoe' } },
+                { method: 'POST', path: '/auth/password/change', name: 'Change Password', body: { current_password: 'User123!', new_password: 'NewUser123!' } },
+                { method: 'POST', path: '/auth/logout', name: 'Logout' }
             ],
-            users: [
-                { method: 'GET', path: '/admin/users', name: 'List All Users' },
-                { method: 'GET', path: '/admin/users/:id', name: 'User Detail', needsParam: true, paramName: 'User ID' },
-                { method: 'PATCH', path: '/admin/users/:id/disable', name: 'Disable User', needsParam: true, paramName: 'User ID' },
-                { method: 'DELETE', path: '/admin/users/:id', name: 'Delete User', needsParam: true, paramName: 'User ID' }
+            accounts: [
+                { method: 'POST', path: '/account/', name: 'Create Account', body: { name: 'BCA Savings', type: 'savings', balance: 15000000 } },
+                { method: 'GET', path: '/account/', name: 'List Accounts' },
+                { method: 'GET', path: '/account/summary', name: 'Account Summary' },
+                { method: 'GET', path: '/account/type/:type', name: 'Accounts by Type', needsParam: true, paramName: 'Type (savings/checking)' },
+                { method: 'GET', path: '/account/groups', name: 'Account Groups' },
+                { method: 'POST', path: '/account/groups', name: 'Create Account Group' },
+                { method: 'GET', path: '/account/:id', name: 'Account Detail', needsParam: true, paramName: 'Account ID' },
+                { method: 'PATCH', path: '/account/:id', name: 'Update Account', needsParam: true, paramName: 'Account ID' },
+                { method: 'PATCH', path: '/account/:id/balance', name: 'Update Balance', needsParam: true, paramName: 'Account ID', body: { balance: 18500000 } },
+                { method: 'POST', path: '/account/:id/sync', name: 'Sync Account', needsParam: true, paramName: 'Account ID' },
+                { method: 'DELETE', path: '/account/:id', name: 'Delete Account', needsParam: true, paramName: 'Account ID' },
+                { method: 'POST', path: '/account/transfer', name: 'Transfer Funds', body: { from_account_id: 'ID1', to_account_id: 'ID2', amount: 250000, description: 'Transfer' } },
+                { method: 'GET', path: '/account/transfers', name: 'Transfer History' }
             ],
             transactions: [
-                { method: 'GET', path: '/admin/transactions/recent', name: 'Recent Transactions' },
-                { method: 'GET', path: '/admin/transactions/all', name: 'All Transactions' },
-                { method: 'PATCH', path: '/admin/transactions/:id/status', name: 'Update Transaction Status', needsParam: true, paramName: 'Transaction ID' },
-                { method: 'DELETE', path: '/admin/transactions/:id', name: 'Delete Transaction', needsParam: true, paramName: 'Transaction ID' }
+                { method: 'POST', path: '/transaction/new', name: 'Create Transaction', body: { amount: 75000, category: 'food', description: 'Dinner', account_id: 'ACCOUNT_ID', type: 'expense' } },
+                { method: 'GET', path: '/transaction/', name: 'List Transactions' },
+                { method: 'PATCH', path: '/transaction/update/:id', name: 'Update Transaction', needsParam: true, paramName: 'Transaction ID', body: { amount: 80000, description: 'Updated' } },
+                { method: 'DELETE', path: '/transaction/delete/:id', name: 'Delete Transaction', needsParam: true, paramName: 'Transaction ID' },
+                { method: 'GET', path: '/transaction/filter', name: 'Filter Transactions' },
+                { method: 'GET', path: '/transaction/getMonthly', name: 'Monthly Summary' },
+                { method: 'GET', path: '/transaction/getReport', name: 'Financial Report' }
             ],
-            alerts: [
-                { method: 'GET', path: '/admin/alerts/stats', name: 'Alert Statistics' },
-                { method: 'GET', path: '/admin/alerts', name: 'List Alerts' },
-                { method: 'PATCH', path: '/admin/alerts/:id/read', name: 'Mark Alert as Read', needsParam: true, paramName: 'Alert ID' }
+            budgets: [
+                { method: 'POST', path: '/budget/', name: 'Create Budget', body: { month: '2024-01', amount: 5000000, category: 'monthly' } },
+                { method: 'GET', path: '/budget/', name: 'List Budgets' },
+                { method: 'GET', path: '/budget/summary', name: 'Budget Summary' },
+                { method: 'GET', path: '/budget/all-spending', name: 'All Budgets with Spending' },
+                { method: 'GET', path: '/budget/by-month/:month', name: 'Budget by Month', needsParam: true, paramName: 'Month (YYYY-MM)' },
+                { method: 'GET', path: '/budget/:id', name: 'Budget Detail', needsParam: true, paramName: 'Budget ID' },
+                { method: 'PATCH', path: '/budget/:id', name: 'Update Budget', needsParam: true, paramName: 'Budget ID' },
+                { method: 'DELETE', path: '/budget/:id', name: 'Delete Budget', needsParam: true, paramName: 'Budget ID' },
+                { method: 'POST', path: '/budget/category', name: 'Create Category Budget' },
+                { method: 'GET', path: '/budget/category', name: 'List Category Budgets' },
+                { method: 'GET', path: '/budget/category/summary', name: 'Category Budget Summary' }
             ],
-            audit: [
-                { method: 'GET', path: '/admin/audit-logs/stats', name: 'Audit Log Stats' },
-                { method: 'GET', path: '/admin/audit-logs', name: 'List Audit Logs' },
-                { method: 'GET', path: '/admin/audit-logs/export', name: 'Export Audit Logs' }
+            savings: [
+                { method: 'POST', path: '/savings_goal/', name: 'Create Savings Goal', body: { name: 'Emergency Fund', target_amount: 50000000, current_amount: 10000000, deadline: '2024-12-31' } },
+                { method: 'GET', path: '/savings_goal/get', name: 'List Savings Goals' },
+                { method: 'GET', path: '/savings_goal/summary', name: 'Savings Summary' },
+                { method: 'GET', path: '/savings_goal/get/:id', name: 'Savings Goal Detail', needsParam: true, paramName: 'Goal ID' },
+                { method: 'PATCH', path: '/savings_goal/update/:id', name: 'Update Savings Goal', needsParam: true, paramName: 'Goal ID' },
+                { method: 'POST', path: '/savings_goal/:id/contribute', name: 'Add Contribution', needsParam: true, paramName: 'Goal ID', body: { amount: 1000000 } },
+                { method: 'GET', path: '/savings_goal/:id/contributions', name: 'Contribution History', needsParam: true, paramName: 'Goal ID' },
+                { method: 'DELETE', path: '/savings_goal/:id', name: 'Delete Savings Goal', needsParam: true, paramName: 'Goal ID' }
             ],
-            monitoring: [
-                { method: 'GET', path: '/admin/budget-savings/stats', name: 'Budget & Savings Stats' },
-                { method: 'GET', path: '/admin/budgets', name: 'All User Budgets' },
-                { method: 'GET', path: '/admin/savings-goals', name: 'All Savings Goals' },
-                { method: 'GET', path: '/admin/investments/stats', name: 'Investment Stats' },
-                { method: 'GET', path: '/admin/investments', name: 'All Investments' },
-                { method: 'GET', path: '/admin/investments/export', name: 'Export Investments' }
+            investments: [
+                { method: 'POST', path: '/investment/', name: 'Create Investment', body: { symbol: 'BTC', name: 'Bitcoin', type: 'crypto', quantity: 0.5, purchase_price: 600000000 } },
+                { method: 'GET', path: '/investment/', name: 'List Investments' },
+                { method: 'GET', path: '/investment/summary', name: 'Portfolio Summary' },
+                { method: 'GET', path: '/investment/portfolio', name: 'Portfolio with Live Prices' },
+                { method: 'GET', path: '/investment/:id', name: 'Investment Detail', needsParam: true, paramName: 'Investment ID' },
+                { method: 'DELETE', path: '/investment/:id', name: 'Delete Investment', needsParam: true, paramName: 'Investment ID' },
+                { method: 'POST', path: '/investment/refresh-prices', name: 'Refresh All Prices' },
+                { method: 'GET', path: '/prices/crypto', name: 'Crypto Prices' },
+                { method: 'GET', path: '/prices/stocks', name: 'Stock Prices' }
+            ],
+            debts: [
+                { method: 'POST', path: '/debt/', name: 'Create Debt', body: { name: 'Car Loan', total_amount: 150000000, remaining_amount: 120000000, interest_rate: 8.5 } },
+                { method: 'GET', path: '/debt/', name: 'List Debts' },
+                { method: 'GET', path: '/debt/summary', name: 'Debt Summary' },
+                { method: 'GET', path: '/debt/:id', name: 'Debt Detail', needsParam: true, paramName: 'Debt ID' },
+                { method: 'POST', path: '/debt/:id/pay', name: 'Make Payment', needsParam: true, paramName: 'Debt ID', body: { amount: 5000000 } },
+                { method: 'GET', path: '/debt/:id/history', name: 'Payment History', needsParam: true, paramName: 'Debt ID' },
+                { method: 'DELETE', path: '/debt/:id', name: 'Delete Debt', needsParam: true, paramName: 'Debt ID' }
+            ],
+            bills: [
+                { method: 'POST', path: '/bill/', name: 'Create Bill Reminder', body: { name: 'Electricity', amount: 500000, due_date: '2024-01-25' } },
+                { method: 'GET', path: '/bill/', name: 'List Bill Reminders' },
+                { method: 'GET', path: '/bill/due', name: 'Due Bills' },
+                { method: 'GET', path: '/bill/overdue', name: 'Overdue Bills' },
+                { method: 'GET', path: '/bill/summary', name: 'Bill Summary' },
+                { method: 'GET', path: '/bill/:id', name: 'Bill Detail', needsParam: true, paramName: 'Bill ID' },
+                { method: 'PATCH', path: '/bill/:id', name: 'Update Bill', needsParam: true, paramName: 'Bill ID' },
+                { method: 'POST', path: '/bill/:id/pay', name: 'Mark as Paid', needsParam: true, paramName: 'Bill ID' },
+                { method: 'DELETE', path: '/bill/:id', name: 'Delete Bill', needsParam: true, paramName: 'Bill ID' }
+            ],
+            recurring: [
+                { method: 'POST', path: '/recurring/', name: 'Create Recurring Transaction', body: { amount: 1000000, category: 'subscription', frequency: 'monthly' } },
+                { method: 'GET', path: '/recurring/', name: 'List Recurring Transactions' },
+                { method: 'GET', path: '/recurring/active', name: 'Active Recurring' },
+                { method: 'GET', path: '/recurring/due', name: 'Due Recurring' },
+                { method: 'GET', path: '/recurring/:id', name: 'Recurring Detail', needsParam: true, paramName: 'Recurring ID' },
+                { method: 'PATCH', path: '/recurring/:id', name: 'Update Recurring', needsParam: true, paramName: 'Recurring ID' },
+                { method: 'POST', path: '/recurring/:id/pause', name: 'Pause Recurring', needsParam: true, paramName: 'Recurring ID' },
+                { method: 'POST', path: '/recurring/:id/resume', name: 'Resume Recurring', needsParam: true, paramName: 'Recurring ID' },
+                { method: 'DELETE', path: '/recurring/:id', name: 'Delete Recurring', needsParam: true, paramName: 'Recurring ID' }
             ],
             analytics: [
-                { method: 'GET', path: '/admin/analytics', name: 'Analytics & Reports' },
-                { method: 'GET', path: '/admin/analytics/export', name: 'Export Analytics' }
+                { method: 'GET', path: '/analytics/', name: 'Full Analytics' },
+                { method: 'GET', path: '/analytics/quick', name: 'Quick Stats' },
+                { method: 'GET', path: '/analytics/goals', name: 'Goal Progress' },
+                { method: 'GET', path: '/analytics/net-worth', name: 'Net Worth Detail' },
+                { method: 'GET', path: '/insights/', name: 'Spending Insights' },
+                { method: 'GET', path: '/insights/health', name: 'Financial Health Score' }
             ],
-            settings: [
-                { method: 'POST', path: '/admin/password', name: 'Change Admin Password' },
-                { method: 'POST', path: '/admin/logout', name: 'Admin Logout' }
+            other: [
+                { method: 'POST', path: '/chatbot/message', name: 'Send Message to Chatbot', body: { message: 'How much did I spend this month?' } },
+                { method: 'GET', path: '/chatbot/history', name: 'Chat History' },
+                { method: 'GET', path: '/chatbot/summary', name: 'Financial Summary' },
+                { method: 'GET', path: '/api/notifications/feed', name: 'Get Notifications' },
+                { method: 'PATCH', path: '/api/notifications/feed/:id/read', name: 'Mark Notification as Read', needsParam: true, paramName: 'Notification ID' }
             ]
         };
 
@@ -262,7 +322,6 @@
             });
             document.getElementById('tab-' + tab).className = 'tab-active px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap';
 
-            // Reset filters on tab change
             document.getElementById('endpointSearch').value = '';
             searchQuery = '';
             setMethodFilter('all');
@@ -292,7 +351,7 @@
         }
 
         function applyFilters() {
-            const currentTab = document.querySelector('[class*="tab-active"]')?.id?.replace('tab-', '') || 'dashboard';
+            const currentTab = document.querySelector('[class*="tab-active"]')?.id?.replace('tab-', '') || 'profile';
             const allEndpoints = endpoints[currentTab] || [];
 
             filteredEndpoints = allEndpoints.filter(ep => {
@@ -319,6 +378,7 @@
                         ep.method === 'PATCH' ? 'amber' : 'red';
                 const respId = `resp-${tab}-${actualIdx}`;
                 const paramId = ep.needsParam ? `param-${tab}-${actualIdx}` : '';
+                const bodyId = ep.body ? `body-${tab}-${actualIdx}` : '';
 
                 return `
                     <div class="endpoint-card rounded-xl p-5">
@@ -338,8 +398,12 @@
                             <input type="text" id="${paramId}" placeholder="${ep.paramName}"
                                 class="w-full bg-black/50 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white mb-3" />
                         ` : ''}
-                        <button onclick="testEndpoint('${ep.method}', '${ep.path}', ${ep.needsParam ? `'${paramId}'` : 'null'}, '${respId}')"
-                            class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded-lg transition-all text-sm">
+                        ${ep.body ? `
+                            <textarea id="${bodyId}" rows="3"
+                                class="w-full bg-black/50 border border-gray-800 rounded-lg px-3 py-2 text-xs font-mono text-white mb-3">${JSON.stringify(ep.body, null, 2)}</textarea>
+                        ` : ''}
+                        <button onclick="testEndpoint('${ep.method}', '${ep.path}', ${ep.needsParam ? `'${paramId}'` : 'null'}, ${ep.body ? `'${bodyId}'` : 'null'}, '${respId}')"
+                            class="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-2 rounded-lg transition-all text-sm">
                             Test
                         </button>
                         <div id="${respId}" class="response-box rounded-lg p-4 mt-4 hidden">
@@ -363,7 +427,7 @@
         function prevPage() {
             if (currentPage > 1) {
                 currentPage--;
-                const tab = document.querySelector('[class*="tab-active"]')?.id?.replace('tab-', '') || 'dashboard';
+                const tab = document.querySelector('[class*="tab-active"]')?.id?.replace('tab-', '') || 'profile';
                 renderPaginatedEndpoints(tab);
             }
         }
@@ -372,7 +436,7 @@
             const totalPages = Math.ceil(filteredEndpoints.length / pageSize) || 1;
             if (currentPage < totalPages) {
                 currentPage++;
-                const tab = document.querySelector('[class*="tab-active"]')?.id?.replace('tab-', '') || 'dashboard';
+                const tab = document.querySelector('[class*="tab-active"]')?.id?.replace('tab-', '') || 'profile';
                 renderPaginatedEndpoints(tab);
             }
         }
@@ -381,7 +445,7 @@
             pageSize = parseInt(document.getElementById('pageSize').value);
             if (pageSize === 50) pageSize = 9999;
             currentPage = 1;
-            const tab = document.querySelector('[class*="tab-active"]')?.id?.replace('tab-', '') || 'dashboard';
+            const tab = document.querySelector('[class*="tab-active"]')?.id?.replace('tab-', '') || 'profile';
             applyFilters();
         }
 
@@ -424,12 +488,12 @@
                 : 'px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm font-medium transition-all';
         }
 
-        async function adminLogin() {
-            const email = document.getElementById('adminEmail').value;
-            const password = document.getElementById('adminPassword').value;
+        async function userLogin() {
+            const email = document.getElementById('userEmail').value;
+            const password = document.getElementById('userPassword').value;
 
             try {
-                const response = await fetch('/admin/login', {
+                const response = await fetch('/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
@@ -438,8 +502,8 @@
                 const data = await response.json();
 
                 if (data.token) {
-                    adminToken = data.token;
-                    document.getElementById('adminToken').value = data.token;
+                    userToken = data.token;
+                    document.getElementById('userToken').value = data.token;
                     alert('Login berhasil! Sekarang bisa test endpoint.');
                 } else {
                     alert('Login gagal: ' + (data.message || 'Unknown error'));
@@ -449,8 +513,8 @@
             }
         }
 
-        async function testEndpoint(method, path, paramId, responseId) {
-            if (!adminToken) {
+        async function testEndpoint(method, path, paramId, bodyId, responseId) {
+            if (!userToken) {
                 alert('Login dulu!');
                 return;
             }
@@ -462,7 +526,17 @@
                     alert('Isi parameter dulu!');
                     return;
                 }
-                finalPath = path.replace(':id', paramValue);
+                finalPath = path.replace(':id', paramValue).replace(':type', paramValue).replace(':month', paramValue);
+            }
+
+            let body = null;
+            if (bodyId) {
+                try {
+                    body = JSON.parse(document.getElementById(bodyId).value);
+                } catch (e) {
+                    alert('JSON-nya salah!');
+                    return;
+                }
             }
 
             const responseBox = document.getElementById(responseId);
@@ -476,10 +550,14 @@
                 const options = {
                     method: method,
                     headers: {
-                        'Authorization': `Bearer ${adminToken}`,
+                        'Authorization': `Bearer ${userToken}`,
                         'Content-Type': 'application/json'
                     }
                 };
+
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
 
                 const response = await fetch(finalPath, options);
                 const data = await response.json();
@@ -512,8 +590,8 @@
         searchQuery = '';
         methodFilter = 'all';
         currentPage = 1;
-        filteredEndpoints = endpoints['dashboard'] || [];
-        switchTab('dashboard');
+        filteredEndpoints = endpoints['profile'] || [];
+        switchTab('profile');
     </script>
 
 </body>

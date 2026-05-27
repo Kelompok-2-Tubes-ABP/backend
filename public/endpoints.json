@@ -1,0 +1,673 @@
+{
+    "admin": [
+        {
+            "method": "GET",
+            "path": "/admin/dashboard",
+            "name": "Dashboard Stats"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/users",
+            "name": "List All Users"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/users/:id",
+            "name": "User Detail",
+            "param": "id"
+        },
+        {
+            "method": "PATCH",
+            "path": "/admin/users/:id/disable",
+            "name": "Disable User",
+            "param": "id"
+        },
+        {
+            "method": "DELETE",
+            "path": "/admin/users/:id",
+            "name": "Delete User",
+            "param": "id"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/transactions/recent",
+            "name": "Recent Transactions"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/transactions/all",
+            "name": "All Transactions"
+        },
+        {
+            "method": "PATCH",
+            "path": "/admin/transactions/:id/status",
+            "name": "Update Transaction Status",
+            "param": "id"
+        },
+        {
+            "method": "DELETE",
+            "path": "/admin/transactions/:id",
+            "name": "Delete Transaction",
+            "param": "id"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/alerts/stats",
+            "name": "Alert Statistics"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/alerts",
+            "name": "List Alerts"
+        },
+        {
+            "method": "PATCH",
+            "path": "/admin/alerts/:id/read",
+            "name": "Mark Alert as Read",
+            "param": "id"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/audit-logs/stats",
+            "name": "Audit Log Stats"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/audit-logs",
+            "name": "List Audit Logs"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/audit-logs/export",
+            "name": "Export Audit Logs"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/budget-savings/stats",
+            "name": "Budget & Savings Stats"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/budgets",
+            "name": "All User Budgets"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/savings-goals",
+            "name": "All Savings Goals"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/investments/stats",
+            "name": "Investment Stats"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/investments",
+            "name": "All Investments"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/investments/export",
+            "name": "Export Investments"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/analytics",
+            "name": "Analytics & Reports"
+        },
+        {
+            "method": "GET",
+            "path": "/admin/analytics/export",
+            "name": "Export Analytics"
+        },
+        {
+            "method": "POST",
+            "path": "/admin/password",
+            "name": "Change Admin Password"
+        },
+        {
+            "method": "POST",
+            "path": "/admin/logout",
+            "name": "Admin Logout"
+        }
+    ],
+    "user": [
+        {
+            "method": "GET",
+            "path": "/profile/",
+            "name": "Get Profile"
+        },
+        {
+            "method": "POST",
+            "path": "/auth/register",
+            "name": "Register",
+            "body": {
+                "name": "Jane Doe",
+                "email": "jane@example.com",
+                "password": "User123!",
+                "username": "janedoe"
+            }
+        },
+        {
+            "method": "POST",
+            "path": "/auth/password/change",
+            "name": "Change Password",
+            "body": {
+                "current_password": "User123!",
+                "new_password": "NewUser123!"
+            }
+        },
+        {
+            "method": "POST",
+            "path": "/auth/logout",
+            "name": "Logout"
+        },
+        {
+            "method": "POST",
+            "path": "/account/",
+            "name": "Create Account",
+            "body": {
+                "name": "BCA Savings",
+                "type": "savings",
+                "balance": 15000000
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/account/",
+            "name": "List Accounts"
+        },
+        {
+            "method": "GET",
+            "path": "/account/summary",
+            "name": "Account Summary"
+        },
+        {
+            "method": "GET",
+            "path": "/account/type/:type",
+            "name": "Accounts by Type",
+            "param": "type"
+        },
+        {
+            "method": "GET",
+            "path": "/account/groups",
+            "name": "Account Groups"
+        },
+        {
+            "method": "POST",
+            "path": "/account/groups",
+            "name": "Create Account Group"
+        },
+        {
+            "method": "GET",
+            "path": "/account/:id",
+            "name": "Account Detail",
+            "param": "id"
+        },
+        {
+            "method": "PATCH",
+            "path": "/account/:id",
+            "name": "Update Account",
+            "param": "id"
+        },
+        {
+            "method": "PATCH",
+            "path": "/account/:id/balance",
+            "name": "Update Balance",
+            "param": "id",
+            "body": {
+                "balance": 18500000
+            }
+        },
+        {
+            "method": "POST",
+            "path": "/account/:id/sync",
+            "name": "Sync Account",
+            "param": "id"
+        },
+        {
+            "method": "DELETE",
+            "path": "/account/:id",
+            "name": "Delete Account",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/account/transfer",
+            "name": "Transfer Funds",
+            "body": {
+                "from_account_id": "ID1",
+                "to_account_id": "ID2",
+                "amount": 250000,
+                "description": "Transfer"
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/account/transfers",
+            "name": "Transfer History"
+        },
+        {
+            "method": "POST",
+            "path": "/transaction/new",
+            "name": "Create Transaction",
+            "body": {
+                "amount": 75000,
+                "category": "food",
+                "description": "Dinner",
+                "account_id": "ACCOUNT_ID",
+                "type": "expense"
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/transaction/",
+            "name": "List Transactions"
+        },
+        {
+            "method": "PATCH",
+            "path": "/transaction/update/:id",
+            "name": "Update Transaction",
+            "param": "id",
+            "body": {
+                "amount": 80000,
+                "description": "Updated"
+            }
+        },
+        {
+            "method": "DELETE",
+            "path": "/transaction/delete/:id",
+            "name": "Delete Transaction",
+            "param": "id"
+        },
+        {
+            "method": "GET",
+            "path": "/transaction/filter",
+            "name": "Filter Transactions"
+        },
+        {
+            "method": "GET",
+            "path": "/transaction/getMonthly",
+            "name": "Monthly Summary"
+        },
+        {
+            "method": "GET",
+            "path": "/transaction/getReport",
+            "name": "Financial Report"
+        },
+        {
+            "method": "POST",
+            "path": "/budget/",
+            "name": "Create Budget",
+            "body": {
+                "month": "2024-01",
+                "amount": 5000000,
+                "category": "monthly"
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/budget/",
+            "name": "List Budgets"
+        },
+        {
+            "method": "GET",
+            "path": "/budget/summary",
+            "name": "Budget Summary"
+        },
+        {
+            "method": "GET",
+            "path": "/budget/all-spending",
+            "name": "All Budgets with Spending"
+        },
+        {
+            "method": "GET",
+            "path": "/budget/by-month/:month",
+            "name": "Budget by Month",
+            "param": "month"
+        },
+        {
+            "method": "GET",
+            "path": "/budget/:id",
+            "name": "Budget Detail",
+            "param": "id"
+        },
+        {
+            "method": "PATCH",
+            "path": "/budget/:id",
+            "name": "Update Budget",
+            "param": "id"
+        },
+        {
+            "method": "DELETE",
+            "path": "/budget/:id",
+            "name": "Delete Budget",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/savings_goal/",
+            "name": "Create Savings Goal",
+            "body": {
+                "name": "Emergency Fund",
+                "target_amount": 50000000,
+                "current_amount": 10000000,
+                "deadline": "2024-12-31"
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/savings_goal/get",
+            "name": "List Savings Goals"
+        },
+        {
+            "method": "GET",
+            "path": "/savings_goal/summary",
+            "name": "Savings Summary"
+        },
+        {
+            "method": "GET",
+            "path": "/savings_goal/get/:id",
+            "name": "Savings Goal Detail",
+            "param": "id"
+        },
+        {
+            "method": "PATCH",
+            "path": "/savings_goal/update/:id",
+            "name": "Update Savings Goal",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/savings_goal/:id/contribute",
+            "name": "Add Contribution",
+            "param": "id",
+            "body": {
+                "amount": 1000000
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/savings_goal/:id/contributions",
+            "name": "Contribution History",
+            "param": "id"
+        },
+        {
+            "method": "DELETE",
+            "path": "/savings_goal/:id",
+            "name": "Delete Savings Goal",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/investment/",
+            "name": "Create Investment",
+            "body": {
+                "symbol": "BTC",
+                "name": "Bitcoin",
+                "type": "crypto",
+                "quantity": 0.5,
+                "purchase_price": 600000000
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/investment/",
+            "name": "List Investments"
+        },
+        {
+            "method": "GET",
+            "path": "/investment/summary",
+            "name": "Portfolio Summary"
+        },
+        {
+            "method": "GET",
+            "path": "/investment/portfolio",
+            "name": "Portfolio with Live Prices"
+        },
+        {
+            "method": "GET",
+            "path": "/investment/:id",
+            "name": "Investment Detail",
+            "param": "id"
+        },
+        {
+            "method": "DELETE",
+            "path": "/investment/:id",
+            "name": "Delete Investment",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/investment/refresh-prices",
+            "name": "Refresh All Prices"
+        },
+        {
+            "method": "GET",
+            "path": "/prices/crypto",
+            "name": "Crypto Prices"
+        },
+        {
+            "method": "GET",
+            "path": "/prices/stocks",
+            "name": "Stock Prices"
+        },
+        {
+            "method": "POST",
+            "path": "/debt/",
+            "name": "Create Debt",
+            "body": {
+                "name": "Car Loan",
+                "total_amount": 150000000,
+                "remaining_amount": 120000000,
+                "interest_rate": 8.5
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/debt/",
+            "name": "List Debts"
+        },
+        {
+            "method": "GET",
+            "path": "/debt/summary",
+            "name": "Debt Summary"
+        },
+        {
+            "method": "GET",
+            "path": "/debt/:id",
+            "name": "Debt Detail",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/debt/:id/pay",
+            "name": "Make Payment",
+            "param": "id",
+            "body": {
+                "amount": 5000000
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/debt/:id/history",
+            "name": "Payment History",
+            "param": "id"
+        },
+        {
+            "method": "DELETE",
+            "path": "/debt/:id",
+            "name": "Delete Debt",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/bill/",
+            "name": "Create Bill Reminder",
+            "body": {
+                "name": "Electricity",
+                "amount": 500000,
+                "due_date": "2024-01-25"
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/bill/",
+            "name": "List Bill Reminders"
+        },
+        {
+            "method": "GET",
+            "path": "/bill/due",
+            "name": "Due Bills"
+        },
+        {
+            "method": "GET",
+            "path": "/bill/overdue",
+            "name": "Overdue Bills"
+        },
+        {
+            "method": "GET",
+            "path": "/bill/summary",
+            "name": "Bill Summary"
+        },
+        {
+            "method": "GET",
+            "path": "/bill/:id",
+            "name": "Bill Detail",
+            "param": "id"
+        },
+        {
+            "method": "PATCH",
+            "path": "/bill/:id",
+            "name": "Update Bill",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/bill/:id/pay",
+            "name": "Mark as Paid",
+            "param": "id"
+        },
+        {
+            "method": "DELETE",
+            "path": "/bill/:id",
+            "name": "Delete Bill",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/recurring/",
+            "name": "Create Recurring Transaction",
+            "body": {
+                "amount": 1000000,
+                "category": "subscription",
+                "frequency": "monthly"
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/recurring/",
+            "name": "List Recurring Transactions"
+        },
+        {
+            "method": "GET",
+            "path": "/recurring/active",
+            "name": "Active Recurring"
+        },
+        {
+            "method": "GET",
+            "path": "/recurring/due",
+            "name": "Due Recurring"
+        },
+        {
+            "method": "GET",
+            "path": "/recurring/:id",
+            "name": "Recurring Detail",
+            "param": "id"
+        },
+        {
+            "method": "PATCH",
+            "path": "/recurring/:id",
+            "name": "Update Recurring",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/recurring/:id/pause",
+            "name": "Pause Recurring",
+            "param": "id"
+        },
+        {
+            "method": "POST",
+            "path": "/recurring/:id/resume",
+            "name": "Resume Recurring",
+            "param": "id"
+        },
+        {
+            "method": "DELETE",
+            "path": "/recurring/:id",
+            "name": "Delete Recurring",
+            "param": "id"
+        },
+        {
+            "method": "GET",
+            "path": "/analytics/",
+            "name": "Full Analytics"
+        },
+        {
+            "method": "GET",
+            "path": "/analytics/quick",
+            "name": "Quick Stats"
+        },
+        {
+            "method": "GET",
+            "path": "/analytics/goals",
+            "name": "Goal Progress"
+        },
+        {
+            "method": "GET",
+            "path": "/analytics/net-worth",
+            "name": "Net Worth Detail"
+        },
+        {
+            "method": "GET",
+            "path": "/insights/",
+            "name": "Spending Insights"
+        },
+        {
+            "method": "GET",
+            "path": "/insights/health",
+            "name": "Financial Health Score"
+        },
+        {
+            "method": "POST",
+            "path": "/chatbot/message",
+            "name": "Send Message to Chatbot",
+            "body": {
+                "message": "How much did I spend this month?"
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/chatbot/history",
+            "name": "Chat History"
+        },
+        {
+            "method": "GET",
+            "path": "/chatbot/summary",
+            "name": "Financial Summary"
+        },
+        {
+            "method": "GET",
+            "path": "/api/notifications/feed",
+            "name": "Get Notifications"
+        },
+        {
+            "method": "PATCH",
+            "path": "/api/notifications/feed/:id/read",
+            "name": "Mark Notification as Read",
+            "param": "id"
+        }
+    ]
+}

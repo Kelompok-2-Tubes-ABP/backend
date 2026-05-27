@@ -130,5 +130,10 @@ func main() {
 		c.File("./public/index.html")
 	})
 
+	// Serve user testing UI on /user-test
+	router.GET("/user-test", func(c *gin.Context) {
+		c.File("./public/user.html")
+	})
+
 	router.Run()
 }

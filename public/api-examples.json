@@ -1,0 +1,209 @@
+{
+    "user_endpoints": {
+        "auth_login": {
+            "method": "POST",
+            "path": "/auth/login",
+            "request": {
+                "email": "john@example.com",
+                "password": "User123!"
+            },
+            "response": {
+                "message": "Login successful",
+                "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "user": {
+                    "id": "507f1f77bcf86cd799439011",
+                    "name": "John Doe",
+                    "email": "john@example.com",
+                    "username": "johndoe"
+                }
+            }
+        },
+        "auth_register": {
+            "method": "POST",
+            "path": "/auth/register",
+            "request": {
+                "name": "Jane Doe",
+                "email": "jane@example.com",
+                "password": "User123!",
+                "username": "janedoe"
+            },
+            "response": {
+                "message": "User registered successfully",
+                "user": {
+                    "id": "507f1f77bcf86cd799439012",
+                    "name": "Jane Doe",
+                    "email": "jane@example.com",
+                    "username": "janedoe",
+                    "is_verified": false
+                }
+            }
+        },
+        "create_account": {
+            "method": "POST",
+            "path": "/account/",
+            "request": {
+                "name": "BCA Savings",
+                "type": "savings",
+                "balance": 15000000
+            },
+            "response": {
+                "message": "Account created successfully",
+                "account": {
+                    "id": "60d5f484f1b2c72b8c8e4f1a",
+                    "name": "BCA Savings",
+                    "type": "savings",
+                    "balance": 15000000,
+                    "currency": "IDR",
+                    "created_at": "2024-01-15T10:30:00Z"
+                }
+            }
+        },
+        "create_transaction": {
+            "method": "POST",
+            "path": "/transaction/new",
+            "request": {
+                "amount": 75000,
+                "category": "food",
+                "description": "Dinner at local diner",
+                "account_id": "60d5f484f1b2c72b8c8e4f1a",
+                "type": "expense",
+                "date": "2024-01-15"
+            },
+            "response": {
+                "message": "Transaction created successfully",
+                "transaction": {
+                    "id": "60d5f484f1b2c72b8c8e4f1b",
+                    "amount": 75000,
+                    "category": "food",
+                    "description": "Dinner at local diner",
+                    "type": "expense",
+                    "account_id": "60d5f484f1b2c72b8c8e4f1a",
+                    "date": "2024-01-15T00:00:00Z",
+                    "created_at": "2024-01-15T19:30:00Z"
+                }
+            }
+        },
+        "create_budget": {
+            "method": "POST",
+            "path": "/budget/",
+            "request": {
+                "month": "2024-01",
+                "amount": 5000000,
+                "category": "monthly"
+            },
+            "response": {
+                "message": "Budget created successfully",
+                "budget": {
+                    "id": "60d5f484f1b2c72b8c8e4f1c",
+                    "month": "2024-01",
+                    "amount": 5000000,
+                    "spent": 0,
+                    "remaining": 5000000,
+                    "category": "monthly"
+                }
+            }
+        },
+        "create_savings_goal": {
+            "method": "POST",
+            "path": "/savings_goal/",
+            "request": {
+                "name": "Emergency Fund",
+                "target_amount": 50000000,
+                "current_amount": 10000000,
+                "deadline": "2024-12-31"
+            },
+            "response": {
+                "message": "Savings goal created successfully",
+                "savings_goal": {
+                    "id": "60d5f484f1b2c72b8c8e4f1d",
+                    "name": "Emergency Fund",
+                    "target_amount": 50000000,
+                    "current_amount": 10000000,
+                    "deadline": "2024-12-31T00:00:00Z",
+                    "progress_percentage": 20,
+                    "status": "in_progress"
+                }
+            }
+        },
+        "create_investment": {
+            "method": "POST",
+            "path": "/investment/",
+            "request": {
+                "symbol": "BTC",
+                "name": "Bitcoin",
+                "type": "crypto",
+                "quantity": 0.5,
+                "purchase_price": 600000000,
+                "purchase_date": "2024-01-15"
+            },
+            "response": {
+                "message": "Investment created successfully",
+                "investment": {
+                    "id": "60d5f484f1b2c72b8c8e4f1e",
+                    "symbol": "BTC",
+                    "name": "Bitcoin",
+                    "type": "crypto",
+                    "quantity": 0.5,
+                    "purchase_price": 600000000,
+                    "current_price": 650000000,
+                    "total_value": 325000000,
+                    "profit_loss": 25000000,
+                    "profit_loss_percentage": 8.33
+                }
+            }
+        }
+    },
+    "admin_endpoints": {
+        "admin_login": {
+            "method": "POST",
+            "path": "/admin/login",
+            "request": {
+                "email": "admin@financeapi.com",
+                "password": "Admin123!"
+            },
+            "response": {
+                "message": "Login successful",
+                "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "user": {
+                    "id": "507f1f77bcf86cd799439011",
+                    "email": "admin@financeapi.com",
+                    "role": "admin"
+                }
+            }
+        },
+        "dashboard_stats": {
+            "method": "GET",
+            "path": "/admin/dashboard",
+            "response": {
+                "total_users": 1250,
+                "active_users": 980,
+                "total_transactions": 45678,
+                "total_volume": 12500000.50,
+                "new_users_today": 15,
+                "transactions_today": 234,
+                "revenue_this_month": 5600000
+            }
+        },
+        "list_users": {
+            "method": "GET",
+            "path": "/admin/users",
+            "response": {
+                "users": [
+                    {
+                        "id": "507f1f77bcf86cd799439011",
+                        "name": "John Doe",
+                        "email": "john@example.com",
+                        "username": "johndoe",
+                        "is_verified": true,
+                        "is_active": true,
+                        "created_at": "2024-01-15T10:30:00Z",
+                        "last_login": "2024-01-20T15:45:00Z"
+                    }
+                ],
+                "total": 1250,
+                "page": 1,
+                "per_page": 20
+            }
+        }
+    }
+}
