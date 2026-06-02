@@ -1,6 +1,10 @@
 package utils
 
-import "strings"
+import (
+	"financeapi/essentials/constants"
+	"financeapi/essentials/models"
+	"strings"
+)
 
 // IsIncome check if a category is an income category
 func IsIncome(category string) bool {
@@ -38,4 +42,20 @@ func IsValidMonthFormat(month string) bool {
 		}
 	}
 	return true
+}
+
+// IsIncomeByType checks if a transaction is income based on Type field (with backward compatibility fallback)
+func IsIncomeByType(tx models.Transaction) bool {
+	if tx.Type != "" {
+		return tx.Type == constants.TrxIncome
+	}
+	return IsIncome(tx.Category)
+}
+
+// IsOutcomeByType checks if a transaction is outcome based on Type field (with backward compatibility fallback)
+func IsOutcomeByType(tx models.Transaction) bool {
+	if tx.Type != "" {
+		return tx.Type == constants.TrxOutcome
+	}
+	return IsOutcome(tx.Category)
 }

@@ -159,7 +159,7 @@ func (s *SpendingInsightService) calculateSavingsRate(userID primitive.ObjectID)
 
 	for _, tx := range transactions {
 		if tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth) {
-			if utils.IsIncome(tx.Category) {
+			if utils.IsIncomeByType(tx) {
 				totalIncome += tx.Amount
 			} else {
 				totalExpense += tx.Amount
@@ -324,7 +324,7 @@ func (s *SpendingInsightService) calculateExpenseControl(userID primitive.Object
 	var recentExpenses []float64
 
 	for _, tx := range transactions {
-		if tx.Date.After(threeMonthsAgo) && utils.IsOutcome(tx.Category) {
+		if tx.Date.After(threeMonthsAgo) && utils.IsOutcomeByType(tx) {
 			monthKey := tx.Date.Format("2006-01")
 			monthlyExpenses[monthKey] += tx.Amount
 			recentExpenses = append(recentExpenses, tx.Amount)
@@ -398,7 +398,7 @@ func (s *SpendingInsightService) getMonthlyIncome(userID primitive.ObjectID) flo
 	}
 
 	for _, tx := range transactions {
-		if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && utils.IsIncome(tx.Category) {
+		if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && utils.IsIncomeByType(tx) {
 			totalIncome += tx.Amount
 		}
 	}
@@ -419,7 +419,7 @@ func (s *SpendingInsightService) calculateSavingsRatePercent(userID primitive.Ob
 	transactions, _ := s.transactionService.ShowTransaction(userID.Hex())
 	for _, tx := range transactions {
 		if tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth) {
-			if utils.IsIncome(tx.Category) {
+			if utils.IsIncomeByType(tx) {
 				totalIncome += tx.Amount
 			} else {
 				totalExpense += tx.Amount
@@ -477,7 +477,7 @@ func (s *SpendingInsightService) calculateEmergencyFundMonths(userID primitive.O
 	if s.transactionService != nil {
 		transactions, _ := s.transactionService.ShowTransaction(userID.Hex())
 		for _, tx := range transactions {
-			if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && utils.IsOutcome(tx.Category) {
+			if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && utils.IsOutcomeByType(tx) {
 				monthlyExpenses += tx.Amount
 			}
 		}

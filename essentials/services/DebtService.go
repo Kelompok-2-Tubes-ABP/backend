@@ -202,6 +202,7 @@ func (s *DebtService) MakePayment(id primitive.ObjectID, userID primitive.Object
 				Description: fmt.Sprintf("Payment for %s to %s", debt.Name, debt.Creditor),
 				Date:        now,
 				Month:       now.Format("January 2006"),
+				Type:        "outcome",
 			}
 			_, err = s.transactionCol.InsertOne(sessCtx, globalTrans)
 			if err != nil {
@@ -320,13 +321,10 @@ func (s *DebtService) DeleteDebt(id primitive.ObjectID, userID primitive.ObjectI
 func (s *DebtService) GetUserMonthlyIncome(userID primitive.ObjectID) (float64, error) {
 	threeMonthsAgo := time.Now().AddDate(0, -3, 0)
 
-	// Categories that count as income
-	incomeCategories := []string{"income", "gaji", "salary", "pendapatan", "revenue"}
-
 	cursor, err := s.transactionCol.Find(context.TODO(), bson.M{
-		"user_id":  userID.Hex(),
-		"date":     bson.M{"$gte": threeMonthsAgo},
-		"category": bson.M{"$in": incomeCategories},
+		"user_id": userID.Hex(),
+		"date":    bson.M{"$gte": threeMonthsAgo},
+		"type":    "income",
 	})
 	if err != nil {
 		return 0, err

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"financeapi/essentials/models"
+	"financeapi/essentials/utils"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -501,7 +502,7 @@ func (s *ChatbotService) GetFinancialContext(userID string) map[string]interface
 		transactions, _ := s.transactionService.ShowTransaction(userID)
 		var income, expense float64
 		for _, tx := range transactions {
-			if tx.Category == "income" || tx.Category == "pemasukan" {
+			if utils.IsIncomeByType(tx) {
 				income += tx.Amount
 			} else {
 				expense += tx.Amount

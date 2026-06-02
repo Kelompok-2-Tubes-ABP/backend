@@ -15,4 +15,5 @@ type Transaction struct {
 	Date        time.Time          `bson:"date" json:"date"`
 	Month       string             `bson:"month" json:"month"`
 	Status      string             `bson:"status" json:"status"`
+	Type        string             `bson:"type" json:"type"` // "income" or "outcome"
 }

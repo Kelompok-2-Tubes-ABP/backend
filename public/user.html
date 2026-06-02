@@ -126,8 +126,10 @@
 
         <!-- Tabs -->
         <div class="flex gap-2 mb-6 overflow-x-auto pb-2">
+            <button onclick="switchTab('dashboard')" id="tab-dashboard"
+                class="tab-active px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Dashboard</button>
             <button onclick="switchTab('profile')" id="tab-profile"
-                class="tab-active px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Profile</button>
+                class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Profile</button>
             <button onclick="switchTab('accounts')" id="tab-accounts"
                 class="tab-inactive px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">Accounts</button>
             <button onclick="switchTab('transactions')" id="tab-transactions"
@@ -204,6 +206,20 @@
         let isAllExpanded = false;
 
         const endpoints = {
+            dashboard: [
+                { method: 'GET', path: '/profile/', name: 'Get Profile (Header)' },
+                { method: 'GET', path: '/api/notifications/feed', name: 'Get Notifications' },
+                { method: 'GET', path: '/analytics/quick', name: 'Quick Stats (Saldo, Income, Outcome)' },
+                { method: 'GET', path: '/budget/summary', name: 'Budget Summary (Current Month)' },
+                { method: 'GET', path: '/savings_goal/summary', name: 'Savings Summary' },
+                { method: 'GET', path: '/analytics/goals', name: 'Goal Progress List' },
+                { method: 'GET', path: '/savings_goal/get', name: 'List Savings Goals' },
+                { method: 'GET', path: '/analytics/', name: 'Full Analytics (Top Expense Categories)' },
+                { method: 'GET', path: '/investment/portfolio', name: 'Portfolio with Live Prices' },
+                { method: 'GET', path: '/investment/summary', name: 'Portfolio Summary' },
+                { method: 'GET', path: '/transaction/', name: 'List Transactions (Recent Transactions)' },
+                { method: 'POST', path: '/chatbot/message', name: 'Send Message to Chatbot', body: { message: 'How much did I spend this month?' } }
+            ],
             profile: [
                 { method: 'GET', path: '/profile/', name: 'Get Profile' },
                 { method: 'POST', path: '/auth/register', name: 'Register', body: { name: 'Jane Doe', email: 'jane@example.com', password: 'User123!', username: 'janedoe' } },
@@ -590,8 +606,8 @@
         searchQuery = '';
         methodFilter = 'all';
         currentPage = 1;
-        filteredEndpoints = endpoints['profile'] || [];
-        switchTab('profile');
+        filteredEndpoints = endpoints['dashboard'] || [];
+        switchTab('dashboard');
     </script>
 
 </body>

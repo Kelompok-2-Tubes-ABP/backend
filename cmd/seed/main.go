@@ -274,6 +274,11 @@ func seedTransactions(db *mongo.Database, userIDs []primitive.ObjectID) {
 
 			date := time.Now().AddDate(0, 0, -j-i*5)
 
+			txType := "outcome"
+			if !txTemplate.isExpense {
+				txType = "income"
+			}
+
 			tx := models.Transaction{
 				ID:          primitive.NewObjectID(),
 				User_id:     userID.Hex(),
@@ -283,6 +288,7 @@ func seedTransactions(db *mongo.Database, userIDs []primitive.ObjectID) {
 				Date:        date,
 				Month:       date.Format("2006-01"),
 				Status:      "completed",
+				Type:        txType,
 			}
 
 			db.Collection("Transaction").InsertOne(context.TODO(), tx)

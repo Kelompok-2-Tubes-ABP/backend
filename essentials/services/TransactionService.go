@@ -48,12 +48,7 @@ func buildFilters(userID string, filter models.FilterTransaction) bson.M {
 	if filter.Category != "" {
 		filters["category"] = filter.Category
 	} else if filter.Type != "" {
-		incomeCategories := []string{"income", "gaji", "salary", "pendapatan", "revenue"}
-		if filter.Type == "income" {
-			filters["category"] = bson.M{"$in": incomeCategories}
-		} else if filter.Type == "outcome" {
-			filters["category"] = bson.M{"$nin": incomeCategories}
-		}
+		filters["type"] = filter.Type
 	}
 
 	if filter.FromDate != "" || filter.ToDate != "" {
@@ -103,7 +98,7 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 
 	totalOutcome := 0.0
 	for _, t := range transactions {
-		if utils.IsOutcome(t.Category) {
+		if utils.IsOutcomeByType(t) {
 			totalOutcome += t.Amount
 		}
 	}
@@ -124,7 +119,7 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 			return models.Transaction{}, err
 		}
 	} else {
-		if utils.IsOutcome(transaction.Category) {
+		if utils.IsOutcomeByType(transaction) {
 			if totalOutcome+transaction.Amount > budget.Limit {
 				if s.notificationService != nil {
 					objID, _ := primitive.ObjectIDFromHex(transaction.User_id)
@@ -156,7 +151,7 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 	}
 
 	// Alert for large transactions
-	if transaction.Amount >= 5000000 && utils.IsOutcome(transaction.Category) {
+	if transaction.Amount >= 5000000 && utils.IsOutcomeByType(transaction) {
 		if s.notificationService != nil {
 			objID, _ := primitive.ObjectIDFromHex(transaction.User_id)
 			s.notificationService.CreateNotification(context.TODO(), objID, "Large Transaction Alert", fmt.Sprintf("A large transaction of %.2f was detected in category %s.", transaction.Amount, transaction.Category), models.NotifTypeTransaction, "")
@@ -238,7 +233,7 @@ func (t *TransactionService) GetMonthly(userID string, filter models.Report) (ma
 	for _, tr := range transactions {
 		category := tr.Category
 
-		if utils.IsIncome(category) {
+		if utils.IsIncomeByType(tr) {
 			totalIncome += tr.Amount
 		} else {
 			totalOutcome += tr.Amount
@@ -265,7 +260,7 @@ func (t *TransactionService) GetReport(userID string, filter models.FilterTransa
 	pipeline := mongo.Pipeline{
 		{{"$match", filters}},
 		{{"$group", bson.D{
-			{"_id", "$category"},
+			{"_id", "$type"},
 			{"total", bson.D{{"$sum", "$amount"}}},
 		}}},
 	}
@@ -285,6 +280,15 @@ func (t *TransactionService) GetReport(userID string, filter models.FilterTransa
 		if err := cursor.Decode(&result); err != nil {
 			return nil, err
 		}
+
+		// Classify by type field
+		if result.ID == "income" {
+			report["income"] += result.Total
+		} else {
+			report["outcome"] += result.Total
+		}
+
+		// Keep type breakdown for reference
 		report[result.ID] = result.Total
 	}
 
@@ -374,6 +378,9 @@ func (t *TransactionService) UpdateTransaction(id primitive.ObjectID, tr models.
 	}
 	if tr.Status != "" {
 		updateFields["status"] = tr.Status
+	}
+	if tr.Type != "" {
+		updateFields["type"] = tr.Type
 	}
 
 	if len(updateFields) == 0 {

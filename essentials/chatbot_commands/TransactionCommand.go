@@ -75,8 +75,10 @@ func (c *TransactionCommand) handleAddTransaction(userID, message string) string
 	isExpense := containsAny(msg, []string{"spent", "beli", "buy", "purchase", "makan", "food", "lunch", "dinner", "belanja", "keluar", "bayar", "pay", "pengeluaran", "expense", "transaction", "untuk", "buying"})
 
 	category := constants.TrxOutcome
+	txType := constants.TrxOutcome
 	if isIncome && !isExpense {
 		category = constants.TrxIncome
+		txType = constants.TrxIncome
 	} else {
 		specificCategory := utils.ExtractExpenseCategory(msg)
 		if specificCategory != "" {
@@ -90,6 +92,7 @@ func (c *TransactionCommand) handleAddTransaction(userID, message string) string
 		User_id:     userID,
 		Amount:      amount,
 		Category:    category,
+		Type:        txType,
 		Date:        time.Now(),
 		Description: description,
 	}
@@ -100,7 +103,7 @@ func (c *TransactionCommand) handleAddTransaction(userID, message string) string
 	}
 
 	categoryLabel := "Pengeluaran"
-	if category == constants.TrxIncome {
+	if txType == constants.TrxIncome {
 		categoryLabel = "Pemasukan"
 	}
 
