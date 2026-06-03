@@ -192,7 +192,7 @@ func (s *AnalyticsService) GetQuickStats(userID string) (*models.QuickStats, err
 		stats.InvestmentValue = totalValue
 	}
 
-	if s.investmentService != nil || s.accountService != nil {
+	if s.accountService != nil || s.investmentService != nil || s.debtService != nil {
 		netWorth, _, _, _ := s.calculateNetWorth(userOID)
 		stats.NetWorth = netWorth
 	}
@@ -326,6 +326,13 @@ func (s *AnalyticsService) calculateNetWorth(userOID primitive.ObjectID) (float6
 	var totalAssets float64
 	var totalLiabilities float64
 
+	if s.accountService != nil {
+		accounts, _ := s.accountService.GetUserAccounts(userOID)
+		for _, acc := range accounts {
+			totalAssets += acc.CurrentBalance
+		}
+	}
+
 	if s.investmentService != nil && s.priceService != nil {
 		investments, _ := s.investmentService.GetUserInvestments(userOID)
 		for _, inv := range investments {
@@ -339,13 +346,6 @@ func (s *AnalyticsService) calculateNetWorth(userOID primitive.ObjectID) (float6
 			if err == nil {
 				totalAssets += price * inv.Quantity
 			}
-		}
-	}
-
-	if s.accountService != nil {
-		accounts, _ := s.accountService.GetUserAccounts(userOID)
-		for _, acc := range accounts {
-			totalAssets += acc.CurrentBalance
 		}
 	}
 
