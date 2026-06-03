@@ -78,6 +78,7 @@ func main() {
 	analyticsService.SetSavingsGoalService(savingsGoalService)
 	analyticsService.SetBillReminderService(billReminderService)
 	analyticsService.SetPriceService(priceService)
+	analyticsService.SetAccountService(accountService)
 
 	// Budget Service
 	budgetService := services.NewBudgetService(client, "mydb")

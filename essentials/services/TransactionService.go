@@ -48,7 +48,13 @@ func buildFilters(userID string, filter models.FilterTransaction) bson.M {
 	if filter.Category != "" {
 		filters["category"] = filter.Category
 	} else if filter.Type != "" {
-		filters["type"] = filter.Type
+		// Use category-based filtering for backward compatibility
+		// This handles transactions without the type field set
+		if filter.Type == "income" {
+			filters["category"] = bson.M{"$in": []string{"income", "gaji", "salary", "pendapatan", "revenue"}}
+		} else {
+			filters["category"] = bson.M{"$nin": []string{"income", "gaji", "salary", "pendapatan", "revenue"}}
+		}
 	}
 
 	if filter.FromDate != "" || filter.ToDate != "" {
@@ -350,6 +356,54 @@ func (s *TransactionService) GetCategoryStats(userID string, filter models.Filte
 	}
 
 	return stats, nil
+}
+
+// GetBiggestExpense returns the single largest expense transaction for a user
+func (s *TransactionService) GetBiggestExpense(userID string, fromDate, toDate string) (*models.Transaction, error) {
+	// Build filter for outcome transactions
+	filters := bson.M{
+		"user_id": userID,
+	}
+
+	// Add date range filter
+	if fromDate != "" || toDate != "" {
+		dateFilter := bson.M{}
+		if fromDate != "" {
+			fromTime, err := time.Parse("2006-01-02", fromDate)
+			if err == nil {
+				dateFilter["$gte"] = fromTime
+			}
+		}
+		if toDate != "" {
+			toTime, err := time.Parse("2006-01-02", toDate)
+			if err == nil {
+				toTime = toTime.Add(23*time.Hour + 59*59*time.Second + 999999999*time.Nanosecond)
+				dateFilter["$lte"] = toTime
+			}
+		}
+		if len(dateFilter) > 0 {
+			filters["date"] = dateFilter
+		}
+	}
+
+	// Filter only outcome transactions (non-income categories)
+	filters["category"] = bson.M{
+		"$nin": []string{"income", "gaji", "salary", "pendapatan", "revenue"},
+	}
+
+	// Find one transaction sorted by amount descending
+	opts := options.FindOne().SetSort(bson.D{{"amount", -1}})
+	cursor := s.collection.FindOne(context.TODO(), filters, opts)
+
+	var transaction models.Transaction
+	if err := cursor.Decode(&transaction); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &transaction, nil
 }
 
 func (t *TransactionService) DeleteTransaction(id primitive.ObjectID) error {

@@ -161,6 +161,17 @@ func (s *AnalyticsService) GetQuickStats(userID string) (*models.QuickStats, err
 		} else {
 			stats.TopExpenses = topExpenses
 		}
+
+		// Get biggest single expense
+		biggestExpense, _ := s.transactionService.GetBiggestExpense(userID, monthStart.Format("2006-01-02"), now.Format("2006-01-02"))
+		if biggestExpense != nil {
+			stats.BiggestExpense = &models.BiggestExpense{
+				Amount:      biggestExpense.Amount,
+				Category:    biggestExpense.Category,
+				Description: biggestExpense.Description,
+				Date:        biggestExpense.Date,
+			}
+		}
 	}
 
 	if s.investmentService != nil && s.priceService != nil {
