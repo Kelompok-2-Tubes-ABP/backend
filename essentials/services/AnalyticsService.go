@@ -192,7 +192,7 @@ func (s *AnalyticsService) GetQuickStats(userID string) (*models.QuickStats, err
 		stats.InvestmentValue = totalValue
 	}
 
-	if s.investmentService != nil {
+	if s.investmentService != nil || s.accountService != nil {
 		netWorth, _, _, _ := s.calculateNetWorth(userOID)
 		stats.NetWorth = netWorth
 	}
