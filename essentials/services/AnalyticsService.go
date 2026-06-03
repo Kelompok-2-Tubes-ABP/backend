@@ -147,6 +147,20 @@ func (s *AnalyticsService) GetQuickStats(userID string) (*models.QuickStats, err
 		stats.MonthSpending = report["outcome"]
 		stats.MonthIncome = report["income"]
 		stats.MonthSavings = report["income"] - report["outcome"]
+
+		// Get top expenses for the month
+		expenseFilter := models.FilterTransaction{
+			FromDate: monthStart.Format("2006-01-02"),
+			ToDate:   now.Format("2006-01-02"),
+			Type:     "outcome",
+		}
+		topExpenses, _ := s.transactionService.GetCategoryStats(userID, expenseFilter)
+		// Limit to top 3 expenses
+		if len(topExpenses) > 3 {
+			stats.TopExpenses = topExpenses[:3]
+		} else {
+			stats.TopExpenses = topExpenses
+		}
 	}
 
 	if s.investmentService != nil && s.priceService != nil {

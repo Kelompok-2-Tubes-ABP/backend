@@ -118,15 +118,16 @@ type GoalProgress struct {
 
 // QuickStats represents quick summary stats for dashboard
 type QuickStats struct {
-	TodaySpending   float64 `json:"today_spending" bson:"today_spending"`
-	WeekSpending    float64 `json:"week_spending" bson:"week_spending"`
-	MonthSpending   float64 `json:"month_spending" bson:"month_spending"`
-	TodayIncome     float64 `json:"today_income" bson:"today_income"`
-	WeekIncome      float64 `json:"week_income" bson:"week_income"`
-	MonthIncome     float64 `json:"month_income" bson:"month_income"`
-	MonthSavings    float64 `json:"month_savings" bson:"month_savings"`
-	ActiveBills     int     `json:"active_bills" bson:"active_bills"`
-	UpcomingBills   float64 `json:"upcoming_bills" bson:"upcoming_bills"`
-	InvestmentValue float64 `json:"investment_value" bson:"investment_value"`
-	NetWorth        float64 `json:"net_worth" bson:"net_worth"`
+	TodaySpending   float64          `json:"today_spending" bson:"today_spending"`
+	WeekSpending    float64          `json:"week_spending" bson:"week_spending"`
+	MonthSpending   float64          `json:"month_spending" bson:"month_spending"`
+	TodayIncome     float64          `json:"today_income" bson:"today_income"`
+	WeekIncome      float64          `json:"week_income" bson:"week_income"`
+	MonthIncome     float64          `json:"month_income" bson:"month_income"`
+	MonthSavings    float64          `json:"month_savings" bson:"month_savings"`
+	ActiveBills     int              `json:"active_bills" bson:"active_bills"`
+	UpcomingBills   float64          `json:"upcoming_bills" bson:"upcoming_bills"`
+	InvestmentValue float64          `json:"investment_value" bson:"investment_value"`
+	NetWorth        float64          `json:"net_worth" bson:"net_worth"`
+	TopExpenses     []CategoryStat   `json:"top_expenses" bson:"top_expenses"` // Top expense categories
 }
