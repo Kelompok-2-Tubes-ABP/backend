@@ -120,27 +120,47 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 	err = budgetColl.FindOne(context.TODO(), filterBudget).Decode(&budget)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			fmt.Println("⚠️ No monthly budget found, skipping budget check")
+			// No budget set - skip check
 		} else {
 			return models.Transaction{}, err
 		}
 	} else {
+		// Budget exists - check thresholds (only for outcome transactions)
 		if utils.IsOutcomeByType(transaction) {
-			if totalOutcome+transaction.Amount > budget.Limit {
+			percentageUsed := (totalOutcome + transaction.Amount) / budget.Limit * 100
+
+			if percentageUsed >= 100 {
+				// Over budget - warning but allow transaction
 				if s.notificationService != nil {
 					objID, _ := primitive.ObjectIDFromHex(transaction.User_id)
-					s.notificationService.CreateNotification(context.TODO(), objID, "Over Budget Alert", fmt.Sprintf("Your transaction exceeds your monthly budget limit of %.2f", budget.Limit), models.NotifTypeBudget, "")
+					s.notificationService.CreateNotification(
+						context.TODO(), objID,
+						"⚠️ Budget Exceeded!",
+						fmt.Sprintf("You've exceeded your budget! Spending: %.2f / Limit: %.2f",
+							totalOutcome+transaction.Amount, budget.Limit),
+						models.NotifTypeBudget, "")
 				}
-				return models.Transaction{}, fmt.Errorf(
-					"❌ Budget exceeded: total %.2f / limit %.2f",
-					totalOutcome+transaction.Amount, budget.Limit,
-				)
-			} else if totalOutcome+transaction.Amount > 0.9*budget.Limit {
-				fmt.Printf("⚠️ Warning: You've reached 90%% of your monthly budget (%.2f / %.2f)\n",
-					totalOutcome+transaction.Amount, budget.Limit)
+			} else if percentageUsed >= 90 {
+				// 90% threshold
 				if s.notificationService != nil {
 					objID, _ := primitive.ObjectIDFromHex(transaction.User_id)
-					s.notificationService.CreateNotification(context.TODO(), objID, "Near Budget Limit", fmt.Sprintf("You have reached 90%% of your monthly budget (%.2f / %.2f)", totalOutcome+transaction.Amount, budget.Limit), models.NotifTypeBudget, "")
+					s.notificationService.CreateNotification(
+						context.TODO(), objID,
+						"⚠️ Budget Warning - 90%",
+						fmt.Sprintf("You've used 90%% of your budget (%.2f / %.2f)",
+							totalOutcome+transaction.Amount, budget.Limit),
+						models.NotifTypeBudget, "")
+				}
+			} else if percentageUsed >= 75 {
+				// 75% threshold
+				if s.notificationService != nil {
+					objID, _ := primitive.ObjectIDFromHex(transaction.User_id)
+					s.notificationService.CreateNotification(
+						context.TODO(), objID,
+						"📊 Budget Caution - 75%",
+						fmt.Sprintf("You've used 75%% of your budget (%.2f / %.2f)",
+							totalOutcome+transaction.Amount, budget.Limit),
+						models.NotifTypeBudget, "")
 				}
 			}
 		}

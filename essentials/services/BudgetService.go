@@ -31,6 +31,8 @@ func NewBudgetService(client *mongo.Client, dbName string) *BudgetService {
 }
 
 func (b *BudgetService) SetTransactionService(txService *TransactionService) {
+	// BudgetService uses direct collection access, not the service
+	// This is just for interface compliance
 }
 
 func (b *BudgetService) GetCollection() *mongo.Collection {
@@ -84,6 +86,9 @@ func (b *BudgetService) CreateBudget(budget models.MonthlyBudget) (models.Monthl
 	if err != mongo.ErrNoDocuments {
 		return models.MonthlyBudget{}, err
 	}
+
+	budget.CreatedAt = time.Now()
+	budget.UpdatedAt = time.Now()
 
 	result, err := b.collection.InsertOne(context.TODO(), budget)
 	if err != nil {
@@ -262,10 +267,13 @@ func (b *BudgetService) CalculateSpending(userID, month string) (float64, error)
 		return 0, errors.New("transaction collection not initialized")
 	}
 
+	// Filter out income categories - only count expenses
+	incomeCategories := []string{"income", "gaji", "salary", "pendapatan", "revenue"}
 	pipeline := mongo.Pipeline{
 		{{"$match", bson.D{
 			{"user_id", userID},
 			{"month", month},
+			{"category", bson.D{{"$nin", incomeCategories}}},
 		}}},
 		{{"$group", bson.D{
 			{"_id", nil},
@@ -462,8 +470,14 @@ func (b *BudgetService) GetUserCategoryBudgets(userID string) ([]models.Category
 
 func (b *BudgetService) GetCategoryBudgetByMonth(userID, month string) ([]models.CategoryBudget, error) {
 	// Optimization: Use aggregation to calculate spending for all budgets in this month in one go
+	// Filter out income categories - only count expenses
+	incomeCategories := []string{"income", "gaji", "salary", "pendapatan", "revenue"}
 	pipeline := mongo.Pipeline{
-		{{"$match", bson.D{{"user_id", userID}, {"month", month}}}},
+		{{"$match", bson.D{
+			{"user_id", userID},
+			{"month", month},
+			{"category", bson.D{{"$nin", incomeCategories}}},
+		}}},
 		{{"$group", bson.D{
 			{"_id", "$category"},
 			{"total", bson.D{{"$sum", "$amount"}}},

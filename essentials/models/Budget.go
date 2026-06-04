@@ -7,11 +7,12 @@ import (
 )
 
 type MonthlyBudget struct {
-	ID primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-
-	UserID string  `bson:"user_id" json:"user_id"`
-	Month  string  `bson:"month" json:"month"`
-	Limit  float64 `bson:"limit" json:"limit"`
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	UserID    string             `bson:"user_id" json:"user_id"`
+	Month     string             `bson:"month" json:"month"`
+	Limit     float64            `bson:"limit" json:"limit"`
+	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
+	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
 }
 
 // CategoryBudget represents a budget for a specific category

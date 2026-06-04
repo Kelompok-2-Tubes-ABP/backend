@@ -82,6 +82,7 @@ func main() {
 
 	// Budget Service
 	budgetService := services.NewBudgetService(client, "mydb")
+	budgetService.SetTransactionService(txService)
 
 	// Inject services into chatbot
 	chatbotService.SetInvestmentService(investmentService)
