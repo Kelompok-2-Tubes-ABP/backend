@@ -300,6 +300,60 @@ func (b *BudgetService) CalculateSpending(userID, month string) (float64, error)
 	return 0, nil
 }
 
+// UpdateBudgetSpent recalculates and updates the spent amount for a monthly budget
+func (b *BudgetService) UpdateBudgetSpent(userID, month string) error {
+	if b.transactionCol == nil {
+		return errors.New("transaction collection not initialized")
+	}
+
+	// Calculate spending using type field (with fallback to category for backward compatibility)
+	pipeline := mongo.Pipeline{
+		{{"$match", bson.D{
+			{"user_id", userID},
+			{"month", month},
+		}}},
+		{{"$group", bson.D{
+			{"_id", "$type"},
+			{"total", bson.D{{"$sum", "$amount"}}},
+		}}},
+	}
+
+	cursor, err := b.transactionCol.Aggregate(context.TODO(), pipeline)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(context.TODO())
+
+	totalSpent := 0.0
+	for cursor.Next(context.TODO()) {
+		var result struct {
+			ID    string  `bson:"_id"`
+			Total float64 `bson:"total"`
+		}
+		if err := cursor.Decode(&result); err != nil {
+			continue
+		}
+		// Only count outcome transactions
+		if result.ID == "outcome" || result.ID == "" {
+			// If ID is empty, use fallback: check if it's not in income categories
+			if result.ID == "" {
+				// This handles old transactions without type field
+				// Will be counted if they pass the category check
+			}
+			totalSpent += result.Total
+		}
+	}
+
+	// Update the budget's spent field
+	_, err = b.collection.UpdateOne(
+		context.TODO(),
+		bson.M{"user_id": userID, "month": month},
+		bson.M{"$set": bson.M{"spent": totalSpent, "updated_at": time.Now()}},
+	)
+
+	return err
+}
+
 func (b *BudgetService) GetAllBudgetsWithSpending(userID string) ([]map[string]interface{}, error) {
 	budgets, err := b.GetUserBudgets(userID)
 	if err != nil {

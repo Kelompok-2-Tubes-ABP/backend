@@ -18,6 +18,7 @@ import (
 type TransactionService struct {
 	collection *mongo.Collection
 	notificationService *NotificationService
+	budgetService *BudgetService
 }
 
 func NewTransactionService(client *mongo.Client, dbName string) *TransactionService {
@@ -27,6 +28,42 @@ func NewTransactionService(client *mongo.Client, dbName string) *TransactionServ
 
 func (s *TransactionService) SetNotificationService(ns *NotificationService) {
 	s.notificationService = ns
+}
+
+func (s *TransactionService) SetBudgetService(bs *BudgetService) {
+	s.budgetService = bs
+}
+
+// getBudgetMonthFormat converts "June" to "2026-06" format for budget lookup
+func (s *TransactionService) getBudgetMonthFormat(monthStr string, date time.Time) string {
+	// Month names mapping
+	monthMap := map[string]string{
+		"january":   "01",
+		"february":  "02",
+		"march":     "03",
+		"april":     "04",
+		"may":       "05",
+		"june":      "06",
+		"july":      "07",
+		"august":    "08",
+		"september": "09",
+		"october":   "10",
+		"november":  "11",
+		"december":  "12",
+	}
+
+	monthLower := strings.ToLower(monthStr)
+	if monthNum, ok := monthMap[monthLower]; ok {
+		return fmt.Sprintf("%d-%s", date.Year(), monthNum)
+	}
+
+	// If already in YYYY-MM format, return as is
+	if len(monthStr) == 7 && monthStr[4] == '-' {
+		return monthStr
+	}
+
+	// Fallback to date's month
+	return date.Format("2006-01")
 }
 
 func buildFilters(userID string, filter models.FilterTransaction) bson.M {
@@ -174,6 +211,13 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 	result, err := s.collection.InsertOne(context.TODO(), transaction)
 	if err != nil {
 		return models.Transaction{}, err
+	}
+
+	// Update budget spent in realtime (only for outcome transactions)
+	if utils.IsOutcomeByType(transaction) && s.budgetService != nil {
+		// Convert month format from "June" to "2026-06" for budget lookup
+		budgetMonth := s.getBudgetMonthFormat(transaction.Month, transaction.Date)
+		_ = s.budgetService.UpdateBudgetSpent(transaction.User_id, budgetMonth)
 	}
 
 	// Alert for large transactions

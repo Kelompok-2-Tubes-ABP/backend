@@ -83,6 +83,13 @@ func main() {
 	// Budget Service
 	budgetService := services.NewBudgetService(client, "mydb")
 	budgetService.SetTransactionService(txService)
+	txService.SetBudgetService(budgetService)
+
+	// Wire SpendingInsightService with dependencies (after all services created)
+	spendingInsightService.SetTransactionService(txService)
+	spendingInsightService.SetDebtService(debtService)
+	spendingInsightService.SetBudgetService(budgetService)
+	spendingInsightService.SetAccountService(accountService)
 
 	// Inject services into chatbot
 	chatbotService.SetInvestmentService(investmentService)
