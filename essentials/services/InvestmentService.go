@@ -48,6 +48,25 @@ func (s *InvestmentService) CreateInvestment(inv models.Investment) (models.Inve
 		inv.Currency = "IDR"
 	}
 
+	// Auto-fetch current price if not provided
+	if inv.CurrentPrice <= 0 && s.priceService != nil {
+		var price float64
+		var err error
+		if inv.Type == "crypto" {
+			price, err = s.priceService.GetCryptoPrice(inv.Symbol, inv.Currency)
+		} else {
+			price, err = s.priceService.GetStockPrice(inv.Symbol, true)
+		}
+		if err == nil && price > 0 {
+			inv.CurrentPrice = price
+		}
+	}
+
+	// Set default average_cost if not provided (use current price)
+	if inv.AverageCost <= 0 {
+		inv.AverageCost = inv.CurrentPrice
+	}
+
 	inv.CalculateValues()
 	inv.IsActive = true
 	inv.LastPriceUpdate = time.Now()
