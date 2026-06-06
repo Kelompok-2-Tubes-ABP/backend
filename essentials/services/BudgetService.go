@@ -354,6 +354,98 @@ func (b *BudgetService) UpdateBudgetSpent(userID, month string) error {
 	return err
 }
 
+// UpdateCategoryBudgetSpent recalculates and updates the spent amount for category budgets
+func (b *BudgetService) UpdateCategoryBudgetSpent(userID, month, category string) error {
+	if b.categoryBudgetCol == nil {
+		return errors.New("category budget collection not initialized")
+	}
+
+	// Find the category budget
+	var catBudget models.CategoryBudget
+	err := b.categoryBudgetCol.FindOne(context.TODO(), bson.M{
+		"user_id": userID,
+		"month":   month,
+		"category": category,
+	}).Decode(&catBudget)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil // No category budget set, skip
+		}
+		return err
+	}
+
+	// Calculate spending for this category
+	pipeline := mongo.Pipeline{
+		{{"$match", bson.D{
+			{"user_id", userID},
+			{"month", month},
+			{"category", category},
+		}}},
+		{{"$group", bson.D{
+			{"_id", "$type"},
+			{"total", bson.D{{"$sum", "$amount"}}},
+		}}},
+	}
+
+	cursor, err := b.transactionCol.Aggregate(context.TODO(), pipeline)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(context.TODO())
+
+	totalSpent := 0.0
+	for cursor.Next(context.TODO()) {
+		var result struct {
+			ID    string  `bson:"_id"`
+			Total float64 `bson:"total"`
+		}
+		if err := cursor.Decode(&result); err != nil {
+			continue
+		}
+		if result.ID == "outcome" || result.ID == "" {
+			totalSpent += result.Total
+		}
+	}
+
+	// Update the category budget's spent field
+	_, err = b.categoryBudgetCol.UpdateOne(
+		context.TODO(),
+		bson.M{"user_id": userID, "month": month, "category": category},
+		bson.M{"$set": bson.M{"spent": totalSpent, "updated_at": time.Now()}},
+	)
+
+	return err
+}
+
+// UpdateAllCategoryBudgetsSpent recalculates spent for all category budgets in a month
+func (b *BudgetService) UpdateAllCategoryBudgetsSpent(userID, month string) error {
+	if b.categoryBudgetCol == nil {
+		return nil
+	}
+
+	// Get all category budgets for this month
+	cursor, err := b.categoryBudgetCol.Find(context.TODO(), bson.M{
+		"user_id": userID,
+		"month":   month,
+	})
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(context.TODO())
+
+	var catBudgets []models.CategoryBudget
+	if err := cursor.All(context.TODO(), &catBudgets); err != nil {
+		return err
+	}
+
+	// Update each category budget spent
+	for _, catBudget := range catBudgets {
+		_ = b.UpdateCategoryBudgetSpent(userID, month, catBudget.Category)
+	}
+
+	return nil
+}
+
 func (b *BudgetService) GetAllBudgetsWithSpending(userID string) ([]map[string]interface{}, error) {
 	budgets, err := b.GetUserBudgets(userID)
 	if err != nil {

@@ -122,6 +122,17 @@ func buildFilters(userID string, filter models.FilterTransaction) bson.M {
 	return filters
 }
 func (s *TransactionService) CreateTransaction(transaction models.Transaction) (models.Transaction, error) {
+	// Normalize month format: "June" -> "2026-06" for consistent storage
+	if transaction.Date.IsZero() {
+		transaction.Date = time.Now()
+	}
+	if transaction.Month == "" || transaction.Month == "0" {
+		transaction.Month = transaction.Date.Format("2006-01")
+	} else {
+		// Convert "June" -> "2026-06"
+		transaction.Month = s.getBudgetMonthFormat(transaction.Month, transaction.Date)
+	}
+
 	filters := bson.M{
 		"user_id": transaction.User_id,
 		"month":   transaction.Month,
@@ -215,9 +226,9 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 
 	// Update budget spent in realtime (only for outcome transactions)
 	if utils.IsOutcomeByType(transaction) && s.budgetService != nil {
-		// Convert month format from "June" to "2026-06" for budget lookup
-		budgetMonth := s.getBudgetMonthFormat(transaction.Month, transaction.Date)
+		budgetMonth := transaction.Month // Already normalized to YYYY-MM format
 		_ = s.budgetService.UpdateBudgetSpent(transaction.User_id, budgetMonth)
+		_ = s.budgetService.UpdateAllCategoryBudgetsSpent(transaction.User_id, budgetMonth)
 	}
 
 	// Alert for large transactions
@@ -283,7 +294,14 @@ func (t *TransactionService) GetMonthly(userID string, filter models.Report) (ma
 		"user_id": userID,
 	}
 	if filter.Month != "" {
-		filters["month"] = filter.Month
+		// If already in YYYY-MM format, use directly
+		if len(filter.Month) == 7 && filter.Month[4] == '-' {
+			filters["month"] = filter.Month
+		} else {
+			// Convert month name to YYYY-MM using current year
+			monthStr := t.getBudgetMonthFormat(filter.Month, time.Now())
+			filters["month"] = monthStr
+		}
 	}
 	cursor, err := t.collection.Find(context.TODO(), filters)
 	if err != nil {
