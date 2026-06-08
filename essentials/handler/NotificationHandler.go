@@ -23,8 +23,13 @@ func NewNotificationHandler(db *mongo.Database) *NotificationHandler {
 
 // GetMyNotifications fetches notifications for the authenticated user
 func (h *NotificationHandler) GetMyNotifications(c *gin.Context) {
-	userID, _ := c.Get("user_id")
-	
+	userIDStr, _ := c.Get("user_id")
+	userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
 	unreadOnlyStr := c.Query("unread_only")
 	unreadOnly := unreadOnlyStr == "true"
 
@@ -34,13 +39,13 @@ func (h *NotificationHandler) GetMyNotifications(c *gin.Context) {
 		limit = 50
 	}
 
-	notifications, err := h.notificationService.GetUserNotifications(c.Request.Context(), userID.(primitive.ObjectID), unreadOnly, limit)
+	notifications, err := h.notificationService.GetUserNotifications(c.Request.Context(), userID, unreadOnly, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notifications"})
 		return
 	}
 
-	unreadCount, _ := h.notificationService.GetUnreadCount(c.Request.Context(), userID.(primitive.ObjectID))
+	unreadCount, _ := h.notificationService.GetUnreadCount(c.Request.Context(), userID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"notifications": notifications,
@@ -50,16 +55,21 @@ func (h *NotificationHandler) GetMyNotifications(c *gin.Context) {
 
 // MarkAsRead marks a specific notification as read
 func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
-	userID, _ := c.Get("user_id")
-	notifIDStr := c.Param("id")
+	userIDStr, _ := c.Get("user_id")
+	userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
 
+	notifIDStr := c.Param("id")
 	notifID, err := primitive.ObjectIDFromHex(notifIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid notification ID"})
 		return
 	}
 
-	err = h.notificationService.MarkAsRead(c.Request.Context(), notifID, userID.(primitive.ObjectID))
+	err = h.notificationService.MarkAsRead(c.Request.Context(), notifID, userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to mark notification as read"})
 		return
@@ -70,9 +80,14 @@ func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
 
 // MarkAllAsRead marks all user notifications as read
 func (h *NotificationHandler) MarkAllAsRead(c *gin.Context) {
-	userID, _ := c.Get("user_id")
+	userIDStr, _ := c.Get("user_id")
+	userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
 
-	err := h.notificationService.MarkAllAsRead(c.Request.Context(), userID.(primitive.ObjectID))
+	err = h.notificationService.MarkAllAsRead(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to mark all as read"})
 		return
