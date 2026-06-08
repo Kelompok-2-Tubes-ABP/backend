@@ -225,10 +225,17 @@ func (s *TransactionService) CreateTransaction(transaction models.Transaction) (
 	}
 
 	// Update budget spent in realtime (only for outcome transactions)
-	if utils.IsOutcomeByType(transaction) && s.budgetService != nil {
-		budgetMonth := transaction.Month // Already normalized to YYYY-MM format
-		_ = s.budgetService.UpdateBudgetSpent(transaction.User_id, budgetMonth)
-		_ = s.budgetService.UpdateAllCategoryBudgetsSpent(transaction.User_id, budgetMonth)
+	fmt.Printf("DEBUG CreateTransaction: type=%q, category=%q, Month=%q\n", transaction.Type, transaction.Category, transaction.Month)
+	if utils.IsOutcomeByType(transaction) {
+		if s.budgetService != nil {
+			budgetMonth := transaction.Month // Already normalized to YYYY-MM format
+			fmt.Printf("DEBUG: Updating budget spent for %s, month=%s, type=%s, category=%s\n",
+				transaction.User_id, budgetMonth, transaction.Type, transaction.Category)
+			_ = s.budgetService.UpdateBudgetSpent(transaction.User_id, budgetMonth)
+			_ = s.budgetService.UpdateAllCategoryBudgetsSpent(transaction.User_id, budgetMonth)
+		}
+	} else {
+		fmt.Printf("DEBUG: Skipping budget update - type=%s, category=%s\n", transaction.Type, transaction.Category)
 	}
 
 	// Alert for large transactions
@@ -303,6 +310,7 @@ func (t *TransactionService) GetMonthly(userID string, filter models.Report) (ma
 			filters["month"] = monthStr
 		}
 	}
+	fmt.Printf("DEBUG GetMonthly: user=%s, filter.Month=%q, filters.month=%v\n", userID, filter.Month, filters["month"])
 	cursor, err := t.collection.Find(context.TODO(), filters)
 	if err != nil {
 		return nil, err
@@ -313,6 +321,7 @@ func (t *TransactionService) GetMonthly(userID string, filter models.Report) (ma
 	if err := cursor.All(context.TODO(), &transactions); err != nil {
 		return nil, err
 	}
+	fmt.Printf("DEBUG GetMonthly: found %d transactions\n", len(transactions))
 
 	totalIncome := 0.0
 	totalOutcome := 0.0
@@ -329,6 +338,7 @@ func (t *TransactionService) GetMonthly(userID string, filter models.Report) (ma
 
 		categoryBreakdown[category] += tr.Amount
 	}
+	fmt.Printf("DEBUG GetMonthly: income=%.0f, outcome=%.0f, categories=%v\n", totalIncome, totalOutcome, categoryBreakdown)
 
 	report := map[string]float64{
 		"income":  totalIncome,

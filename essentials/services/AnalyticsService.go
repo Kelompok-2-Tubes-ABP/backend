@@ -72,7 +72,16 @@ func (s *AnalyticsService) GetFullAnalytics(userID string, period string) (*mode
 		report.CashFlow = *cashFlow
 	}
 
-	netWorth, assets, liabilities, err := s.calculateNetWorth(userOID)
+	// Calculate investment value once for reuse
+	var investmentValue float64
+	if s.investmentService != nil {
+		investments, _ := s.investmentService.GetUserInvestments(userOID)
+		for _, inv := range investments {
+			investmentValue += inv.TotalValue
+		}
+	}
+
+	netWorth, assets, liabilities, err := s.calculateNetWorth(userOID, investmentValue)
 	if err == nil {
 		report.NetWorth = netWorth
 		report.TotalAssets = assets
@@ -174,26 +183,20 @@ func (s *AnalyticsService) GetQuickStats(userID string) (*models.QuickStats, err
 		}
 	}
 
+	// Calculate investment value once and reuse for both InvestmentValue and NetWorth
+	var investmentValue float64
 	if s.investmentService != nil && s.priceService != nil {
 		investments, _ := s.investmentService.GetUserInvestments(userOID)
-		totalValue := 0.0
 		for _, inv := range investments {
-			var price float64
-			var err error
-			if string(inv.Type) == "crypto" {
-				price, err = s.priceService.GetCryptoPrice(inv.Symbol, "idr")
-			} else {
-				price, err = s.priceService.GetStockPrice(inv.Symbol, true)
-			}
-			if err == nil {
-				totalValue += price * inv.Quantity
-			}
+			// Use stored TotalValue (Quantity * CurrentPrice) for consistency
+			// This is updated when prices are refreshed via RefreshAllPrices
+			investmentValue += inv.TotalValue
 		}
-		stats.InvestmentValue = totalValue
+		stats.InvestmentValue = investmentValue
 	}
 
 	if s.accountService != nil || s.investmentService != nil || s.debtService != nil {
-		netWorth, _, _, _ := s.calculateNetWorth(userOID)
+		netWorth, _, _, _ := s.calculateNetWorth(userOID, investmentValue)
 		stats.NetWorth = netWorth
 	}
 
@@ -322,37 +325,38 @@ func (s *AnalyticsService) getCashFlow(userID string, startDate, endDate time.Ti
 	}, nil
 }
 
-func (s *AnalyticsService) calculateNetWorth(userOID primitive.ObjectID) (float64, float64, float64, error) {
+func (s *AnalyticsService) calculateNetWorth(userOID primitive.ObjectID, investmentValue float64) (float64, float64, float64, error) {
 	var totalAssets float64
 	var totalLiabilities float64
 
 	if s.accountService != nil {
 		accounts, _ := s.accountService.GetUserAccounts(userOID)
 		for _, acc := range accounts {
-			totalAssets += acc.CurrentBalance
+			// Use CalculateTotalAssets to properly handle credit cards (returns negative for debt)
+			totalAssets += acc.CalculateTotalAssets()
 		}
 	}
 
-	if s.investmentService != nil && s.priceService != nil {
-		investments, _ := s.investmentService.GetUserInvestments(userOID)
-		for _, inv := range investments {
-			var price float64
-			var err error
-			if string(inv.Type) == "crypto" {
-				price, err = s.priceService.GetCryptoPrice(inv.Symbol, "idr")
-			} else {
-				price, err = s.priceService.GetStockPrice(inv.Symbol, true)
-			}
-			if err == nil {
-				totalAssets += price * inv.Quantity
-			}
-		}
-	}
+	// Use pre-calculated investment value from GetQuickStats to avoid duplicate calculations
+	// This uses the stored TotalValue from Investment model (Quantity * CurrentPrice)
+	totalAssets += investmentValue
 
 	if s.debtService != nil {
 		debts, _ := s.debtService.GetUserDebts(userOID)
 		for _, debt := range debts {
 			totalLiabilities += debt.CurrentBalance
+		}
+	}
+
+	// Also include credit card liabilities that weren't captured by accounts
+	// (debtService tracks loans/mortgages separately from credit card accounts)
+	if s.accountService != nil {
+		accounts, _ := s.accountService.GetUserAccounts(userOID)
+		for _, acc := range accounts {
+			if acc.Type == models.AccountTypeCredit {
+				// Add credit card debt to liabilities
+				totalLiabilities += acc.CalculateDebt()
+			}
 		}
 	}
 
@@ -496,11 +500,15 @@ func (s *AnalyticsService) GetNetWorthDetail(userOID primitive.ObjectID) (map[st
 	if s.accountService != nil {
 		accounts, _ := s.accountService.GetUserAccounts(userOID)
 		for _, acc := range accounts {
-			totalAssets += acc.CurrentBalance
+			// Use CalculateTotalAssets to properly handle credit cards
+			assetValue := acc.CalculateTotalAssets()
+			totalAssets += assetValue
 			accountDetails = append(accountDetails, map[string]interface{}{
-				"name":    acc.Name,
-				"balance": acc.CurrentBalance,
-				"type":    acc.Type,
+				"name":           acc.Name,
+				"balance":        acc.CurrentBalance,
+				"asset_value":    assetValue, // positive for assets, negative for credit debt
+				"type":           acc.Type,
+				"is_liability":   acc.Type == models.AccountTypeCredit,
 			})
 		}
 	}
@@ -531,6 +539,24 @@ func (s *AnalyticsService) GetNetWorthDetail(userOID primitive.ObjectID) (map[st
 				"remaining": d.CurrentBalance,
 				"type":      d.Type,
 			})
+		}
+	}
+
+	// Add credit card liabilities from accounts
+	if s.accountService != nil {
+		accounts, _ := s.accountService.GetUserAccounts(userOID)
+		for _, acc := range accounts {
+			if acc.Type == models.AccountTypeCredit {
+				creditDebt := acc.CalculateDebt()
+				if creditDebt > 0 {
+					totalLiabilities += creditDebt
+					debtDetails = append(debtDetails, map[string]interface{}{
+						"name":      acc.Name + " (Credit Card)",
+						"remaining": creditDebt,
+						"type":      "credit_card",
+					})
+				}
+			}
 		}
 	}
 
