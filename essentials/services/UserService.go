@@ -281,6 +281,21 @@ func (s *UserService) VerifyEmail(token string) error {
 	return nil
 }
 
+// VerifyUserEmail - Debug/Test method to verify user by ID
+func (s *UserService) VerifyUserEmail(userID primitive.ObjectID) error {
+	now := time.Now()
+	_, err := s.collection.UpdateOne(
+		context.TODO(),
+		bson.M{"_id": userID},
+		bson.M{"$set": bson.M{
+			"is_email_verified": true,
+			"email_verified_at": now,
+			"is_active":         true,
+		}},
+	)
+	return err
+}
+
 func (s *UserService) ResendVerificationEmail(email string) (string, error) {
 	user, err := s.GetUserByEmail(email)
 	if err != nil {
@@ -517,4 +532,21 @@ func (s *UserService) CleanupExpiredVerifications() error {
 	}
 
 	return nil
+}
+
+// ResetPasswordDebug - Debug method to reset password directly
+func (s *UserService) ResetPasswordDebug(userID primitive.ObjectID, newPassword string) error {
+	hashedPassword, err := utils.HashPassword(newPassword)
+	if err != nil {
+		return errors.New("failed to hash password")
+	}
+
+	_, err = s.collection.UpdateOne(
+		context.TODO(),
+		bson.M{"_id": userID},
+		bson.M{"$set": bson.M{
+			"password": hashedPassword,
+		}},
+	)
+	return err
 }

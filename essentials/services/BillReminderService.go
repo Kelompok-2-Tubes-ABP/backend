@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"financeapi/essentials/models"
@@ -15,16 +16,27 @@ import (
 )
 
 type BillReminderService struct {
-	collection *mongo.Collection
-	paymentCol *mongo.Collection
+	client              *mongo.Client
+	collection          *mongo.Collection
+	paymentCol          *mongo.Collection
+	notificationService *NotificationService
 }
 
 func NewBillReminderService(client *mongo.Client, dbName string) *BillReminderService {
 	db := client.Database(dbName)
 	return &BillReminderService{
+		client:     client,
 		collection: db.Collection("bill_reminders"),
 		paymentCol: db.Collection("bill_payments"),
 	}
+}
+
+func (s *BillReminderService) SetNotificationService(ns *NotificationService) {
+	s.notificationService = ns
+}
+
+func (s *BillReminderService) GetClient() *mongo.Client {
+	return s.client
 }
 
 func (s *BillReminderService) CreateBillReminder(bill models.BillReminder) (models.BillReminder, error) {
@@ -326,4 +338,78 @@ func (s *BillReminderService) GetPaymentHistory(billID primitive.ObjectID, userI
 	}
 
 	return payments, nil
+}
+
+// CheckAndNotifyDueBills checks for upcoming/overdue bills and creates notifications
+func (s *BillReminderService) CheckAndNotifyDueBills(userID primitive.ObjectID) error {
+	if s.notificationService == nil {
+		fmt.Println("[DEBUG] BillReminderService.notificationService is nil")
+		return nil
+	}
+
+	fmt.Printf("[DEBUG] CheckAndNotifyDueBills called for user: %s\n", userID.Hex())
+
+	// Get bills due in the next 7 days (includes overdue)
+	dueBills, err := s.GetDueBillReminders(userID)
+	if err != nil {
+		fmt.Printf("[DEBUG] GetDueBillReminders error: %v\n", err)
+		return err
+	}
+
+	fmt.Printf("[DEBUG] GetDueBillReminders found %d bills\n", len(dueBills))
+
+	for _, bill := range dueBills {
+		daysUntilDue := int(time.Until(bill.NextDueDate).Hours() / 24)
+
+		var title, message string
+		if daysUntilDue < 0 {
+			title = fmt.Sprintf("Overdue: %s", bill.Name)
+			message = fmt.Sprintf("Bill payment of %.2f is %d days overdue!", bill.Amount, -daysUntilDue)
+		} else if daysUntilDue == 0 {
+			title = fmt.Sprintf("Due Today: %s", bill.Name)
+			message = fmt.Sprintf("Bill payment of %.2f is due today!", bill.Amount)
+		} else if daysUntilDue == 1 {
+			title = fmt.Sprintf("Due Tomorrow: %s", bill.Name)
+			message = fmt.Sprintf("Bill payment of %.2f is due tomorrow!", bill.Amount)
+		} else {
+			title = fmt.Sprintf("Due in %d days: %s", daysUntilDue, bill.Name)
+			message = fmt.Sprintf("Bill payment of %.2f is due in %d days", bill.Amount, daysUntilDue)
+		}
+
+		// Use 24 hour window to avoid duplicate notifications
+		s.notificationService.CheckAndCreateNotification(
+			context.TODO(),
+			userID,
+			title,
+			message,
+			models.NotifTypeBill,
+			"/bills",
+			24*time.Hour,
+		)
+	}
+
+	// Also check for overdue bills
+	overdueBills, err := s.GetOverdueBillReminders(userID)
+	if err != nil {
+		return err
+	}
+
+	for _, bill := range overdueBills {
+		daysOverdue := int(-time.Until(bill.NextDueDate).Hours() / 24)
+		title := fmt.Sprintf("Overdue: %s", bill.Name)
+		message := fmt.Sprintf("Bill payment of %.2f is %d days overdue!", bill.Amount, daysOverdue)
+
+		// Use 24 hour window to avoid duplicate notifications
+		s.notificationService.CheckAndCreateNotification(
+			context.TODO(),
+			userID,
+			title,
+			message,
+			models.NotifTypeBill,
+			"/bills",
+			24*time.Hour,
+		)
+	}
+
+	return nil
 }

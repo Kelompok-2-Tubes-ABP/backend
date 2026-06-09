@@ -6,6 +6,7 @@ import (
 	handler "financeapi/essentials/handler"
 	"financeapi/essentials/routes"
 	services "financeapi/essentials/services"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -66,9 +67,14 @@ func main() {
 	recurringService := services.NewRecurringTransactionService(client, "mydb")
 	adminService := services.NewAdminService(client, "mydb")
 	notificationService := services.NewNotificationService(client.Database("mydb"))
-	
+
 	// Inject notifications into txService
 	txService.SetNotificationService(notificationService)
+
+	// Wire notification service to other services
+	billReminderService.SetNotificationService(notificationService)
+	debtService.SetNotificationService(notificationService)
+	recurringService.SetNotificationService(notificationService)
 
 	// Analytics Service
 	analyticsService := services.NewAnalyticsService()
@@ -84,6 +90,12 @@ func main() {
 	budgetService := services.NewBudgetService(client, "mydb")
 	budgetService.SetTransactionService(txService)
 	txService.SetBudgetService(budgetService)
+
+	// Wire dependencies for background notification worker
+	notificationService.SetDependencies(billReminderService, debtService, recurringService, budgetService, txService)
+
+	// Start background notification worker (checks every 5 minutes)
+	notificationService.StartNotificationWorker(5 * time.Minute)
 
 	// Wire SpendingInsightService with dependencies (after all services created)
 	spendingInsightService.SetTransactionService(txService)

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"financeapi/essentials/models"
@@ -15,16 +16,27 @@ import (
 )
 
 type RecurringTransactionService struct {
-	collection   *mongo.Collection
-	generatedCol *mongo.Collection
+	client              *mongo.Client
+	collection          *mongo.Collection
+	generatedCol        *mongo.Collection
+	notificationService *NotificationService
 }
 
 func NewRecurringTransactionService(client *mongo.Client, dbName string) *RecurringTransactionService {
 	db := client.Database(dbName)
 	return &RecurringTransactionService{
+		client:       client,
 		collection:   db.Collection("recurring_transactions"),
 		generatedCol: db.Collection("generated_transactions"),
 	}
+}
+
+func (s *RecurringTransactionService) SetNotificationService(ns *NotificationService) {
+	s.notificationService = ns
+}
+
+func (s *RecurringTransactionService) GetClient() *mongo.Client {
+	return s.client
 }
 
 func (s *RecurringTransactionService) CreateRecurringTransaction(recurring models.RecurringTransaction) (models.RecurringTransaction, error) {
@@ -339,4 +351,75 @@ func (s *RecurringTransactionService) GetRecurringSummary(userID primitive.Objec
 		"monthly_expenses":     totalMonthlyExpenses,
 		"net_monthly_cashflow": totalMonthlyIncome - totalMonthlyExpenses,
 	}, nil
+}
+
+// CheckAndNotifyDueRecurring checks for upcoming recurring transactions and creates notifications
+func (s *RecurringTransactionService) CheckAndNotifyDueRecurring(userID primitive.ObjectID) error {
+	if s.notificationService == nil {
+		return nil
+	}
+
+	// Get recurring transactions that are due or will be due in the next day
+	dueRecurring, err := s.GetDueRecurringTransactions(userID)
+	if err != nil {
+		return err
+	}
+
+	for _, recurring := range dueRecurring {
+		// Notification for due recurring transactions
+		var title, message string
+		if recurring.Type == "income" {
+			title = fmt.Sprintf("Due: %s Income", recurring.Name)
+			message = fmt.Sprintf("Your recurring income of %.2f (%s) is ready to be recorded!", recurring.Amount, recurring.Frequency)
+		} else {
+			title = fmt.Sprintf("Due: %s Payment", recurring.Name)
+			message = fmt.Sprintf("Your recurring payment of %.2f (%s) is due. Make sure you have enough balance!", recurring.Amount, recurring.Frequency)
+		}
+
+		s.notificationService.CheckAndCreateNotification(
+			context.TODO(),
+			userID,
+			title,
+			message,
+			models.NotifTypeRecurring,
+			"/recurring",
+			24*time.Hour,
+		)
+	}
+
+	// Also notify about recurring transactions that will be due tomorrow
+	now := time.Now()
+	tomorrow := now.AddDate(0, 0, 1)
+
+	recurringList, err := s.GetActiveRecurringTransactions(userID)
+	if err != nil {
+		return err
+	}
+
+	for _, recurring := range recurringList {
+		// Check if next run date is tomorrow
+		nextRun := recurring.NextRunDate
+		if nextRun.Year() == tomorrow.Year() && nextRun.Month() == tomorrow.Month() && nextRun.Day() == tomorrow.Day() {
+			var title, message string
+			if recurring.Type == "income" {
+				title = fmt.Sprintf("Tomorrow: %s Income", recurring.Name)
+				message = fmt.Sprintf("Your recurring income of %.2f (%s) will be processed tomorrow!", recurring.Amount, recurring.Frequency)
+			} else {
+				title = fmt.Sprintf("Tomorrow: %s Payment", recurring.Name)
+				message = fmt.Sprintf("Your recurring payment of %.2f (%s) will be due tomorrow. Prepare your balance!", recurring.Amount, recurring.Frequency)
+			}
+
+			s.notificationService.CheckAndCreateNotification(
+				context.TODO(),
+				userID,
+				title,
+				message,
+				models.NotifTypeRecurring,
+				"/recurring",
+				24*time.Hour,
+			)
+		}
+	}
+
+	return nil
 }

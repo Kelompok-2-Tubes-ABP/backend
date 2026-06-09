@@ -16,6 +16,7 @@ const (
 	NotifTypeGoal        NotificationType = "goal"
 	NotifTypeSecurity    NotificationType = "security"
 	NotifTypeSystem      NotificationType = "system"
+	NotifTypeRecurring   NotificationType = "recurring"
 )
 
 type UserNotification struct {

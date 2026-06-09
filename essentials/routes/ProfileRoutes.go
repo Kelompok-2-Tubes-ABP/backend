@@ -13,5 +13,6 @@ func RegisterProfileRoutes(r *gin.Engine, userService *services.UserService) {
 	{
 		profileProtected.GET("/", handler.ProfileHandler(userService))
 		profileProtected.PATCH("/", handler.UpdateProfileHandler(userService))
+		profileProtected.POST("/change-password", handler.ChangePasswordHandler(userService))
 	}
 }

@@ -284,3 +284,68 @@ func (h *AuthHandler) ResendVerification() gin.HandlerFunc {
 		})
 	}
 }
+
+// DebugVerifyUserHandler - ONLY for development/testing
+// Verifies a user's email directly without code
+func DebugVerifyUserHandler(userService *services.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Email string `json:"email" binding:"required,email"`
+		}
+
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "email required"})
+			return
+		}
+
+		user, err := userService.GetUserByEmail(req.Email)
+		if err != nil {
+			c.JSON(404, gin.H{"error": "user not found"})
+			return
+		}
+
+		err = userService.VerifyUserEmail(user.ID)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"message": "email verified successfully",
+			"email":   req.Email,
+		})
+	}
+}
+
+// DebugResetPasswordHandler - ONLY for development/testing
+// Resets password directly without email
+func DebugResetPasswordHandler(userService *services.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Email       string `json:"email" binding:"required,email"`
+			NewPassword string `json:"new_password" binding:"required,min=6"`
+		}
+
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "email and new_password required"})
+			return
+		}
+
+		user, err := userService.GetUserByEmail(req.Email)
+		if err != nil {
+			c.JSON(404, gin.H{"error": "user not found"})
+			return
+		}
+
+		err = userService.ResetPasswordDebug(user.ID, req.NewPassword)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"message": "password reset successfully",
+			"email":   req.Email,
+		})
+	}
+}

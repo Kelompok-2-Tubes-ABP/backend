@@ -12,16 +12,33 @@ import (
 )
 
 type NotificationHandler struct {
-	notificationService *services.NotificationService
+	notificationService    *services.NotificationService
+	billReminderService    *services.BillReminderService
+	debtService            *services.DebtService
+	recurringService       *services.RecurringTransactionService
 }
 
 func NewNotificationHandler(db *mongo.Database) *NotificationHandler {
+	notificationService := services.NewNotificationService(db)
+	billReminderService := services.NewBillReminderService(db.Client(), "mydb")
+	debtService := services.NewDebtService(db.Client(), "mydb")
+	recurringService := services.NewRecurringTransactionService(db.Client(), "mydb")
+
+	// Wire notification service to other services
+	billReminderService.SetNotificationService(notificationService)
+	debtService.SetNotificationService(notificationService)
+	recurringService.SetNotificationService(notificationService)
+
 	return &NotificationHandler{
-		notificationService: services.NewNotificationService(db),
+		notificationService:   notificationService,
+		billReminderService:    billReminderService,
+		debtService:             debtService,
+		recurringService:       recurringService,
 	}
 }
 
 // GetMyNotifications fetches notifications for the authenticated user
+// It also triggers checks for Bill, Debt, and Recurring notifications
 func (h *NotificationHandler) GetMyNotifications(c *gin.Context) {
 	userIDStr, _ := c.Get("user_id")
 	userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
@@ -29,6 +46,14 @@ func (h *NotificationHandler) GetMyNotifications(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
+
+	// Trigger notification checks for Bill, Debt, and Recurring
+	// These will create notifications if there are due/overdue items
+	go func() {
+		h.billReminderService.CheckAndNotifyDueBills(userID)
+		h.debtService.CheckAndNotifyDueDebtPayments(userID)
+		h.recurringService.CheckAndNotifyDueRecurring(userID)
+	}()
 
 	unreadOnlyStr := c.Query("unread_only")
 	unreadOnly := unreadOnlyStr == "true"

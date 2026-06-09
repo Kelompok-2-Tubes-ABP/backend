@@ -24,6 +24,10 @@ func RegisterAuthRoutes(r *gin.Engine, userService *services.UserService, emailS
 		auth.POST("/reset/request", handler.NewAuthHandler(userService, emailService).RequestPasswordReset())
 		auth.POST("/reset/verify", handler.NewAuthHandler(userService, emailService).VerifyResetToken())
 		auth.POST("/reset/confirm", handler.NewAuthHandler(userService, emailService).ResetPassword())
+
+		// Debug/Test endpoint - ONLY for development (verifies user by email)
+		auth.POST("/debug/verify", handler.DebugVerifyUserHandler(userService))
+		auth.POST("/debug/reset-password", handler.DebugResetPasswordHandler(userService))
 	}
 
 	authProtected := r.Group("/auth", authh.AuthMiddleware())

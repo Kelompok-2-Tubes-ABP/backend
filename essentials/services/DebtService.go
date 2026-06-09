@@ -15,11 +15,12 @@ import (
 )
 
 type DebtService struct {
-	client         *mongo.Client
-	collection     *mongo.Collection
-	paymentCol     *mongo.Collection
-	accountCol     *mongo.Collection
-	transactionCol *mongo.Collection
+	client              *mongo.Client
+	collection          *mongo.Collection
+	paymentCol          *mongo.Collection
+	accountCol          *mongo.Collection
+	transactionCol      *mongo.Collection
+	notificationService *NotificationService
 }
 
 func NewDebtService(client *mongo.Client, dbName string) *DebtService {
@@ -31,6 +32,14 @@ func NewDebtService(client *mongo.Client, dbName string) *DebtService {
 		accountCol:     db.Collection("accounts"),
 		transactionCol: db.Collection("Transaction"),
 	}
+}
+
+func (s *DebtService) SetNotificationService(ns *NotificationService) {
+	s.notificationService = ns
+}
+
+func (s *DebtService) GetClient() *mongo.Client {
+	return s.client
 }
 
 func (s *DebtService) CreateDebt(debt models.Debt) (models.Debt, error) {
@@ -347,4 +356,67 @@ func (s *DebtService) GetUserMonthlyIncome(userID primitive.ObjectID) (float64, 
 
 	// Return average monthly income
 	return totalIncome / 3, nil
+}
+
+// CheckAndNotifyDueDebtPayments checks for upcoming debt payments and creates notifications
+func (s *DebtService) CheckAndNotifyDueDebtPayments(userID primitive.ObjectID) error {
+	if s.notificationService == nil {
+		return nil
+	}
+
+	debts, err := s.GetUserDebts(userID)
+	if err != nil {
+		return err
+	}
+
+	for _, debt := range debts {
+		if debt.IsPaidOff {
+			continue
+		}
+
+		daysUntilDue := int(time.Until(debt.NextPaymentDate).Hours() / 24)
+
+		// Notify if payment is due today, tomorrow, or overdue
+		if daysUntilDue <= 0 && daysUntilDue >= -3 {
+			var title, message string
+			if daysUntilDue < 0 {
+				title = fmt.Sprintf("Overdue: %s Payment", debt.Name)
+				message = fmt.Sprintf("Your debt payment of %.2f to %s is %d days overdue!", debt.PaymentAmount, debt.Creditor, -daysUntilDue)
+			} else if daysUntilDue == 0 {
+				title = fmt.Sprintf("Due Today: %s Payment", debt.Name)
+				message = fmt.Sprintf("Your debt payment of %.2f to %s is due today!", debt.PaymentAmount, debt.Creditor)
+			} else {
+				title = fmt.Sprintf("Due Tomorrow: %s Payment", debt.Name)
+				message = fmt.Sprintf("Your debt payment of %.2f to %s is due tomorrow", debt.PaymentAmount, debt.Creditor)
+			}
+
+			s.notificationService.CheckAndCreateNotification(
+				context.TODO(),
+				userID,
+				title,
+				message,
+				models.NotifTypeDebt,
+				"/debt",
+				24*time.Hour,
+			)
+		}
+
+		// Early warning: 7 days before payment due
+		if daysUntilDue == 7 {
+			title := fmt.Sprintf("Reminder: %s Payment in 7 days", debt.Name)
+			message := fmt.Sprintf("Your debt payment of %.2f to %s is due in 7 days. Remaining balance: %.2f", debt.PaymentAmount, debt.Creditor, debt.CurrentBalance)
+
+			s.notificationService.CheckAndCreateNotification(
+				context.TODO(),
+				userID,
+				title,
+				message,
+				models.NotifTypeDebt,
+				"/debt",
+				24*time.Hour,
+			)
+		}
+	}
+
+	return nil
 }
