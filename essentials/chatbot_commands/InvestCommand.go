@@ -28,22 +28,25 @@ func NewInvestCommand(invService *services.InvestmentService, priceService *serv
 func (c *InvestCommand) Handle(userID string, message string) string {
 	msgLower := strings.ToLower(message)
 
-	// Check for create/add keyword
-	createKeywords := []string{"tambah", "add", "beli", "buy", "invest", "masukan"}
+	// Priority 1: Price check (most specific)
+	priceKeywords := []string{"harga", "price", "nilai", "berapa"}
+	if utils.ContainsAny(msgLower, priceKeywords) && len(strings.Fields(msgLower)) <= 8 {
+		return c.handleAssetPriceQuery(userID, message)
+	}
+
+	// Priority 2: Suggestions/recommendations
+	suggestKeywords := []string{"saran", "recommend", "suggest", "ide", "tips", "bagus", "good", "stocks", "saham", "crypto", "aapl", "googl", "msft", "tsla", "tesla", "apple", "google", "microsoft"}
+	if utils.ContainsAny(msgLower, suggestKeywords) {
+		return c.handleInvestmentRecommendation(userID, message)
+	}
+
+	// Priority 3: Create/add investment (only if explicit add words)
+	createKeywords := []string{"tambah investasi", "add investasi", "beli investasi", "buy investasi", "investasikan", "masukan investasi"}
 	if utils.ContainsAny(msgLower, createKeywords) {
 		return c.handleAddInvestment(userID, message)
 	}
 
-	suggestKeywords := []string{"saran", "recommend", "suggest", "ide", "tips", "bagus", "good", "stocks", "saham", "crypto", "price", "harga", "aapl", "googl", "msft", "tsla", "tesla", "apple", "google", "microsoft"}
-	if utils.ContainsAny(msgLower, suggestKeywords) {
-		return c.handleInvestmentRecommendation(userID, message)
-	}
-	// 1. Detect Price Query (e.g., "Harga Bitcoin", "Price AAPL")
-	priceKeywords := []string{"harga", "price", "nilai", "berapa", "asuransi"}
-	if utils.ContainsAny(msgLower, priceKeywords) && len(strings.Fields(msgLower)) <= 6 {
-		return c.handleAssetPriceQuery(userID, message)
-	}
-
+	// Default: Show portfolio
 	return c.handleInvestment(userID, message)
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"financeapi/essentials/chatbot_commands"
 	config "financeapi/essentials/config"
+	"fmt"
 	handler "financeapi/essentials/handler"
 	"financeapi/essentials/routes"
 	services "financeapi/essentials/services"
@@ -12,11 +13,28 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Build info - set at compile time
+var (
+	BuildVersion = "dev"
+	BuildTime    = time.Now().Format(time.RFC3339)
+	BuildCommit  = "local"
+)
+
 func main() {
 	// Load .env file
 	godotenv.Load()
 
 	router := gin.Default()
+
+	// Build info endpoint
+	router.GET("/health/build", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"version": BuildVersion,
+			"time":    BuildTime,
+			"commit":  BuildCommit,
+		})
+	})
+
 	client := config.ConnectDB()
 
 	// CORS Middleware
@@ -46,6 +64,15 @@ func main() {
 	txService := services.NewTransactionService(client, "mydb")
 	userService := services.NewUserService(client, "mydb")
 	chatbotService := services.NewChatService(client, "mydb", txService)
+
+	// Initialize RAG service for knowledge base
+	ragService, err := services.NewRAGService("./essentials/knowledge/finance_kb.json", 3)
+	if err != nil {
+		fmt.Println("⚠️ RAG service not available:", err)
+	} else {
+		fmt.Println("✅ RAG Knowledge Base loaded")
+		chatbotService.SetRAGService(ragService)
+	}
 
 	// Investment services
 	investmentService := services.NewInvestmentService(client, "mydb")

@@ -51,6 +51,13 @@ func (c *BudgetCommand) handleBudget(userID, msgLower, message string) string {
 		return c.handleCreateBudget(userID, message)
 	}
 
+	// Check for budget category with amount - "budget makanan1000000", "budget transport 500rb"
+	category := utils.ExtractExpenseCategory(msgLower)
+	amount := utils.ParseIndonesianAmount(message)
+	if category != "" && amount > 0 {
+		return c.handleCreateBudget(userID, message)
+	}
+
 	month := time.Now().Format("2006-01")
 
 	// Determine if user is asking for category budget specifically

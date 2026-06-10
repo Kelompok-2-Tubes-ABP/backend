@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Build output
+financeapi
+*.exe
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage.out
+*.cover
+
+# Temp
+tmp/
+temp/
