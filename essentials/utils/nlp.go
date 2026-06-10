@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ParseIndonesianAmount converts Indonesian number format to float
@@ -254,4 +255,165 @@ func FormatNumber(val float64) string {
 		return strconv.FormatFloat(val, 'f', 0, 64)
 	}
 	return strconv.FormatFloat(val, 'f', 2, 64)
+}
+
+// ContainsAny checks if any keyword exists in the string (case-insensitive)
+func ContainsAny(s string, keywords []string) bool {
+	s = strings.ToLower(s)
+	for _, kw := range keywords {
+		if strings.Contains(s, strings.ToLower(kw)) {
+			return true
+		}
+	}
+	return false
+}
+
+// DetectLanguage detects if message is Indonesian or English
+func DetectLanguage(message string) string {
+	msg := strings.ToLower(message)
+	indonesianKeywords := []string{"yang", "dan", "untuk", "dari", "dengan", "tidak", "aku", "kamu", "mau", "nya", "rp", "juta", "ribu", "bu", "buat", "lagi", "bisa", "ada", "sudah", "belum", "akan", "bayar", "pake", "gimana", " gimana", "berapa"}
+
+	matchCount := 0
+	for _, kw := range indonesianKeywords {
+		if strings.Contains(msg, kw) {
+			matchCount++
+		}
+	}
+
+	// If more than 2 Indonesian keywords found, assume Indonesian
+	if matchCount >= 2 {
+		return "id"
+	}
+	return "en"
+}
+
+// ParseDateRange extracts date range from natural language message
+// Returns startDate, endDate, periodName, and error
+func ParseDateRange(message string) (time.Time, time.Time, string, error) {
+	msg := strings.ToLower(message)
+	now := time.Now()
+
+	// Month name mapping (Indonesian + English abbreviations)
+	monthNames := map[string]time.Month{
+		"januari":   time.January,
+		"februari":  time.February,
+		"maret":     time.March,
+		"mei":       time.May,
+		"juni":      time.June,
+		"juli":      time.July,
+		"agustus":   time.August,
+		"september": time.September,
+		"oktober":   time.October,
+		"november":  time.November,
+		"desember":  time.December,
+		"jan":       time.January,
+		"feb":       time.February,
+		"mar":       time.March,
+		"apr":       time.April,
+		"jun":       time.June,
+		"jul":       time.July,
+		"aug":       time.August,
+		"sep":       time.September,
+		"oct":       time.October,
+		"nov":       time.November,
+		"dec":       time.December,
+	}
+
+	// Check for "bulan ini" (this month)
+	if strings.Contains(msg, "bulan ini") {
+		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		end := start.AddDate(0, 1, 0).Add(-time.Second)
+		return start, end, "bulan ini", nil
+	}
+
+	// Check for "bulan lalu" (last month)
+	if strings.Contains(msg, "bulan lalu") {
+		start := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, now.Location())
+		end := start.AddDate(0, 1, 0).Add(-time.Second)
+		return start, end, "bulan lalu", nil
+	}
+
+	// Check for "kemarin" (yesterday)
+	if strings.Contains(msg, "kemarin") || strings.Contains(msg, "yesterday") {
+		start := now.AddDate(0, 0, -1)
+		start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+		end := start.AddDate(0, 0, 1).Add(-time.Second)
+		return start, end, "kemarin", nil
+	}
+
+	// Check for "hari ini" (today)
+	if strings.Contains(msg, "hari ini") || strings.Contains(msg, "today") {
+		start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		end := start.AddDate(0, 0, 1).Add(-time.Second)
+		return start, end, "hari ini", nil
+	}
+
+	// Check for "minggu ini" (this week)
+	if strings.Contains(msg, "minggu ini") || strings.Contains(msg, "week ini") {
+		weekday := int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		start := now.AddDate(0, 0, -(weekday - 1))
+		start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+		end := start.AddDate(0, 0, 7).Add(-time.Second)
+		return start, end, "minggu ini", nil
+	}
+
+	// Check for "minggu lalu" (last week)
+	if strings.Contains(msg, "minggu lalu") || strings.Contains(msg, "week lalu") {
+		weekday := int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		start := now.AddDate(0, 0, -(weekday - 1 + 7))
+		start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+		end := start.AddDate(0, 0, 7).Add(-time.Second)
+		return start, end, "minggu lalu", nil
+	}
+
+	// Check for "N bulan lalu" pattern
+	re := regexp.MustCompile(`(\d+)\s*bulan\s+lalu`)
+	if matches := re.FindStringSubmatch(msg); len(matches) > 1 {
+		if months, err := strconv.Atoi(matches[1]); err == nil {
+			start := time.Date(now.Year(), now.Month()-time.Month(months), 1, 0, 0, 0, 0, now.Location())
+			end := start.AddDate(0, 1, 0).Add(-time.Second)
+			return start, end, matches[1] + " bulan lalu", nil
+		}
+	}
+
+	// Check for "N minggu lalu" pattern
+	re = regexp.MustCompile(`(\d+)\s*minggu\s+lalu`)
+	if matches := re.FindStringSubmatch(msg); len(matches) > 1 {
+		if weeks, err := strconv.Atoi(matches[1]); err == nil {
+			start := now.AddDate(0, 0, -(weeks*7))
+			start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+			end := now
+			return start, end, matches[1] + " minggu lalu", nil
+		}
+	}
+
+	// Check for "N tahun lalu" pattern
+	re = regexp.MustCompile(`(\d+)\s*tahun\s+lalu`)
+	if matches := re.FindStringSubmatch(msg); len(matches) > 1 {
+		if years, err := strconv.Atoi(matches[1]); err == nil {
+			start := time.Date(now.Year()-years, now.Month(), 1, 0, 0, 0, 0, now.Location())
+			end := start.AddDate(0, 1, 0).Add(-time.Second)
+			return start, end, matches[1] + " tahun lalu", nil
+		}
+	}
+
+	// Check for month name (e.g., "januari", "februari")
+	for name, month := range monthNames {
+		if strings.Contains(msg, name) {
+			start := time.Date(now.Year(), month, 1, 0, 0, 0, 0, now.Location())
+			end := start.AddDate(0, 1, 0).Add(-time.Second)
+			return start, end, name, nil
+		}
+	}
+
+	// Default to current month
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	end := start.AddDate(0, 1, 0).Add(-time.Second)
+	return start, end, "bulan ini", nil
 }

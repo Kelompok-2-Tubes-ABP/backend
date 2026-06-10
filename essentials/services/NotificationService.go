@@ -265,6 +265,49 @@ func (s *NotificationService) CheckAllNotificationsForUser(userID primitive.Obje
 		}
 		_ = tomorrow // suppress unused variable warning
 	}
+
+	// 4. Check Budget Thresholds
+	if s.budgetService != nil {
+		// Check monthly budget
+		currentMonth := time.Now().Format("2006-01")
+		monthlyBudgetWithSpending, err := s.budgetService.GetBudgetWithSpending(userID.Hex(), currentMonth)
+		if err == nil {
+			percentageUsed := monthlyBudgetWithSpending["percentage_used"].(float64)
+			s.checkBudgetThreshold(ctx, userID, "Monthly Budget", percentageUsed, currentMonth)
+		}
+
+		// Check category budgets
+		categoryBudgets, err := s.budgetService.GetAllCategoryBudgetsWithSpending(userID.Hex(), currentMonth)
+		if err == nil {
+			for _, catBudgetData := range categoryBudgets {
+				budget := catBudgetData["budget"].(models.CategoryBudget)
+				percentageUsed := catBudgetData["percentage_used"].(float64)
+				s.checkBudgetThreshold(ctx, userID, budget.Category, percentageUsed, currentMonth)
+			}
+		}
+	}
+}
+
+// checkBudgetThreshold checks and creates notification for budget threshold milestones
+func (s *NotificationService) checkBudgetThreshold(ctx context.Context, userID primitive.ObjectID, budgetName string, percentageUsed float64, _ string) {
+	thresholds := []struct {
+		percent     float64
+		titlePrefix string
+		messageTmpl string
+	}{
+		{100, "Budget Exceeded", "Your %s has exceeded its limit! (%.0f%%)"},
+		{90, "Budget Warning", "Your %s is at 90%% capacity (%.0f%% used)"},
+		{75, "Budget Caution", "Your %s is at 75%% capacity (%.0f%% used)"},
+	}
+
+	for _, threshold := range thresholds {
+		if percentageUsed >= threshold.percent {
+			title := fmt.Sprintf("%s: %s", threshold.titlePrefix, budgetName)
+			message := fmt.Sprintf(threshold.messageTmpl, budgetName, percentageUsed)
+			s.CheckAndCreateNotification(ctx, userID, title, message, models.NotifTypeBudget, "/budget", 12*time.Hour)
+			break // Only notify for the highest threshold reached
+		}
+	}
 }
 
 // StartNotificationWorker starts a background goroutine that checks notifications every interval

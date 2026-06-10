@@ -2,7 +2,9 @@ package chatbot_commands
 
 import (
 	"fmt"
+	"time"
 
+	"financeapi/essentials/models"
 	"financeapi/essentials/services"
 	"financeapi/essentials/utils"
 
@@ -57,8 +59,15 @@ func (c *HealthCommand) Handle(userID string, message string) string {
 		}
 	}
 
-	// 2. Add Transaction Stats
-	transactions, _ := c.txService.ShowTransaction(userID)
+	// 2. Add Transaction Stats (current month only)
+	now := time.Now()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	endOfMonth := startOfMonth.AddDate(0, 1, 0).Add(-time.Second)
+	filter := models.FilterTransaction{
+		FromDate: startOfMonth.Format("2006-01-02"),
+		ToDate:   endOfMonth.Format("2006-01-02"),
+	}
+	transactions, _ := c.txService.ShowTransactionByFilter(userID, filter)
 	var totalIncome, totalExpense float64
 	for _, tx := range transactions {
 		if utils.IsIncomeByType(tx) {
@@ -67,8 +76,9 @@ func (c *HealthCommand) Handle(userID string, message string) string {
 			totalExpense += tx.Amount
 		}
 	}
-	summary += fmt.Sprintf("💰 **Ringkasan Bulan Ini:**\n- Pemasukan: Rp%.0f\n- Pengeluaran: Rp%.0f\n- Saldo: Rp%.0f\n\n",
-		totalIncome, totalExpense, totalIncome-totalExpense)
+	monthName := now.Format("January 2006")
+	summary += fmt.Sprintf("💰 **Ringkasan %s:**\n- Pemasukan: Rp%.0f\n- Pengeluaran: Rp%.0f\n- Saldo: Rp%.0f\n\n",
+		monthName, totalIncome, totalExpense, totalIncome-totalExpense)
 
 	// 3. Show Recent Unread Insights & Mark as Read
 	if c.insightService != nil {

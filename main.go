@@ -102,6 +102,7 @@ func main() {
 	spendingInsightService.SetDebtService(debtService)
 	spendingInsightService.SetBudgetService(budgetService)
 	spendingInsightService.SetAccountService(accountService)
+	spendingInsightService.SetSavingsGoalService(savingsGoalService)
 
 	// Inject services into chatbot
 	chatbotService.SetInvestmentService(investmentService)

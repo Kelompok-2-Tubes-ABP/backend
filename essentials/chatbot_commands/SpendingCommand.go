@@ -9,6 +9,7 @@ import (
 
 	"financeapi/essentials/models"
 	"financeapi/essentials/services"
+	"financeapi/essentials/utils"
 )
 
 type SpendingCommand struct {
@@ -88,16 +89,16 @@ func (c *SpendingCommand) handleSpendingAnalysis(userID, msgLower, message strin
 
 		if startDate.IsZero() {
 			switch {
-			case containsAny(msgLower, []string{"bulan lalu", "last month"}):
+			case utils.ContainsAny(msgLower, []string{"bulan lalu", "last month"}):
 				lastMonth := now.AddDate(0, -1, 0)
 				startDate = time.Date(lastMonth.Year(), lastMonth.Month(), 1, 0, 0, 0, 0, time.UTC)
 				endDate = startDate.AddDate(0, 1, 0).Add(-time.Second)
 				periodName = lastMonth.Format("January 2006")
-			case containsAny(msgLower, []string{"bulan ini", "this month", "bulan sekarang"}):
+			case utils.ContainsAny(msgLower, []string{"bulan ini", "this month", "bulan sekarang"}):
 				startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 				endDate = startDate.AddDate(0, 1, 0).Add(-time.Second)
 				periodName = now.Format("January 2006")
-			case containsAny(msgLower, []string{"minggu ini", "this week"}):
+			case utils.ContainsAny(msgLower, []string{"minggu ini", "this week"}):
 				weekday := int(now.Weekday())
 				if weekday == 0 {
 					weekday = 7
@@ -106,7 +107,7 @@ func (c *SpendingCommand) handleSpendingAnalysis(userID, msgLower, message strin
 				startDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
 				endDate = startDate.AddDate(0, 0, 6).Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 				periodName = "Minggu Ini"
-			case containsAny(msgLower, []string{"minggu lalu", "last week"}):
+			case utils.ContainsAny(msgLower, []string{"minggu lalu", "last week"}):
 				weekday := int(now.Weekday())
 				if weekday == 0 {
 					weekday = 7
@@ -115,21 +116,21 @@ func (c *SpendingCommand) handleSpendingAnalysis(userID, msgLower, message strin
 				startDate = time.Date(lastWeekStart.Year(), lastWeekStart.Month(), lastWeekStart.Day(), 0, 0, 0, 0, time.UTC)
 				endDate = startDate.AddDate(0, 0, 6).Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 				periodName = "Minggu Lalu"
-			case containsAny(msgLower, []string{"tahun ini", "this year"}):
+			case utils.ContainsAny(msgLower, []string{"tahun ini", "this year"}):
 				startDate = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
 				endDate = time.Date(now.Year(), 12, 31, 23, 59, 59, 0, time.UTC)
 				periodName = fmt.Sprintf("Tahun %d", now.Year())
-			case containsAny(msgLower, []string{"tahun lalu", "last year"}):
+			case utils.ContainsAny(msgLower, []string{"tahun lalu", "last year"}):
 				lastYear := now.Year() - 1
 				startDate = time.Date(lastYear, 1, 1, 0, 0, 0, 0, time.UTC)
 				endDate = time.Date(lastYear, 12, 31, 23, 59, 59, 0, time.UTC)
 				periodName = fmt.Sprintf("Tahun %d", lastYear)
-			case containsAny(msgLower, []string{"kemarin", "semalam", "yesterday"}):
+			case utils.ContainsAny(msgLower, []string{"kemarin", "semalam", "yesterday"}):
 				yesterday := now.AddDate(0, 0, -1)
 				startDate = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, time.UTC)
 				endDate = time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 23, 59, 59, 0, time.UTC)
 				periodName = "Kemarin"
-			case containsAny(msgLower, []string{"hari ini", "today"}):
+			case utils.ContainsAny(msgLower, []string{"hari ini", "today"}):
 				startDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 				endDate = time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, time.UTC)
 				periodName = "Hari Ini"

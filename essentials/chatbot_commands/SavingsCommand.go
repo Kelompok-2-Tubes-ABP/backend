@@ -3,6 +3,7 @@ package chatbot_commands
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"financeapi/essentials/models"
 	"financeapi/essentials/services"
@@ -27,7 +28,7 @@ func (c *SavingsCommand) Handle(userID string, message string) string {
 }
 
 func (c *SavingsCommand) handleSavings(userID, msgLower, message string) string {
-	if containsAny(msgLower, []string{"ada", "exist", "cek", "lihat", "status", "progress", "how", "apa"}) {
+	if utils.ContainsAny(msgLower, []string{"ada", "exist", "cek", "lihat", "status", "progress", "how", "apa"}) {
 		goals, err := c.savingsGoalService.GetUserSavingsGoals(userID)
 		if err != nil {
 			return fmt.Sprintf("Error: %v", err)
@@ -59,12 +60,12 @@ func (c *SavingsCommand) handleSavings(userID, msgLower, message string) string 
 		return summary
 	}
 
-	if containsAny(msgLower, []string{"tambah", "add", "setor", "nabung", "simpan", "saved", "menabung"}) {
+	if utils.ContainsAny(msgLower, []string{"tambah", "add", "setor", "nabung", "simpan", "saved", "menabung"}) {
 		return c.handleAddSavingsContribution(userID, message)
 	}
 
-	if containsAny(msgLower, []string{"buat", "create", "target baru", "goal baru"}) {
-		return "Untuk membuat tabungan baru, sebutkan: nama tabungan dan target jumlah. Contoh: 'buat tabungan mobil 10 juta'"
+	if utils.ContainsAny(msgLower, []string{"buat", "create", "target baru", "goal baru", "tabungan baru"}) {
+		return c.handleCreateSavingsGoal(userID, message)
 	}
 
 	goals, err := c.savingsGoalService.GetUserSavingsGoals(userID)
@@ -166,6 +167,43 @@ func (c *SavingsCommand) handleAddSavingsContribution(userID, message string) st
 
 	return fmt.Sprintf("✅ Berhasil menambahkan Rp%.0f ke tabungan '%s'!\n\n💰 Total: Rp%.0f / Rp%.0f (%.0f%%)",
 		amount, targetGoal.Name, newAmount, targetGoal.TargetAmount, newProgress)
+}
+
+func (c *SavingsCommand) handleCreateSavingsGoal(userID, message string) string {
+	msg := strings.ToLower(message)
+	amount := utils.ParseIndonesianAmount(message)
+
+	if amount <= 0 {
+		return "Maaf, saya tidak dapat menentukan target jumlah. Contoh: 'buat tabungan mobil 10 juta'"
+	}
+
+	// Extract goal name from message
+	goalName := utils.ExtractSavingsGoalName(msg)
+	if goalName == "" {
+		return "Maaf, saya tidak dapat menentukan nama tabungan. Contoh: 'buat tabungan mobil 10 juta'"
+	}
+
+	userOID, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return "Error: Invalid user ID"
+	}
+
+	goal := models.SavingsGoal{
+		UserID:        userOID,
+		Name:          strings.Title(goalName),
+		TargetAmount:  amount,
+		CurrentAmount: 0,
+		TargetDate:    time.Now().AddDate(1, 0, 0), // Default 1 year
+		Status:        "active",
+		CreatedAt:     time.Now(),
+	}
+
+	created, err := c.savingsGoalService.CreateSavingsGoal(goal)
+	if err != nil {
+		return fmt.Sprintf("❌ Gagal membuat tabungan: %v", err)
+	}
+
+	return fmt.Sprintf("✅ **Tabungan Baru Berhasil Dibuat!**\n\n🎯 Nama: %s\n💰 Target: Rp%.0f\n📅 Target Date: %s\n\nSemangat mencapai targetmu!", created.Name, created.TargetAmount, created.TargetDate.Format("02 Jan 2006"))
 }
 
 func (c *SavingsCommand) listSavingsGoals(goals []models.SavingsGoal) string {

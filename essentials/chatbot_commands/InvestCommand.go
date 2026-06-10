@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"financeapi/essentials/constants"
+	"financeapi/essentials/models"
 	"financeapi/essentials/services"
 	"financeapi/essentials/utils"
 
@@ -27,13 +28,19 @@ func NewInvestCommand(invService *services.InvestmentService, priceService *serv
 func (c *InvestCommand) Handle(userID string, message string) string {
 	msgLower := strings.ToLower(message)
 
-	suggestKeywords := []string{"saran", "recommend", "suggest", "ide", "tips", "bagus", "good", "beli", "buy", "invest", "stocks", "saham", "crypto", "price", "harga", "aapl", "googl", "msft", "tsla", "tesla", "apple", "google", "microsoft"}
-	if containsAny(msgLower, suggestKeywords) {
+	// Check for create/add keyword
+	createKeywords := []string{"tambah", "add", "beli", "buy", "invest", "masukan"}
+	if utils.ContainsAny(msgLower, createKeywords) {
+		return c.handleAddInvestment(userID, message)
+	}
+
+	suggestKeywords := []string{"saran", "recommend", "suggest", "ide", "tips", "bagus", "good", "stocks", "saham", "crypto", "price", "harga", "aapl", "googl", "msft", "tsla", "tesla", "apple", "google", "microsoft"}
+	if utils.ContainsAny(msgLower, suggestKeywords) {
 		return c.handleInvestmentRecommendation(userID, message)
 	}
 	// 1. Detect Price Query (e.g., "Harga Bitcoin", "Price AAPL")
-	priceKeywords := []string{"harga", "price", "nilai", "berapa", "asuransi", "saham", "crypto"}
-	if containsAny(msgLower, priceKeywords) && len(strings.Fields(msgLower)) <= 6 {
+	priceKeywords := []string{"harga", "price", "nilai", "berapa", "asuransi"}
+	if utils.ContainsAny(msgLower, priceKeywords) && len(strings.Fields(msgLower)) <= 6 {
 		return c.handleAssetPriceQuery(userID, message)
 	}
 
@@ -253,4 +260,75 @@ func (c *InvestCommand) handleAssetPriceQuery(userID, message string) string {
 	summary += "💡 *Disclaimer: Harga di atas adalah indikasi real-time dari market global. Tetap lakukan riset sebelum berinvestasi.*"
 
 	return summary
+}
+
+func (c *InvestCommand) handleAddInvestment(userID, message string) string {
+	userOID, _ := primitive.ObjectIDFromHex(userID)
+	msg := strings.ToLower(message)
+
+	amount := utils.ParseIndonesianAmount(message)
+	if amount <= 0 {
+		return "Maaf, saya tidak dapat menentukan jumlah investasi. Contoh: 'tambah investasi BTC 1 juta'"
+	}
+
+	symbol := utils.ExtractSymbolFromMessage(msg)
+	if symbol == "" {
+		// Try to extract common crypto/stock names
+		if strings.Contains(msg, "bitcoin") || strings.Contains(msg, "btc") {
+			symbol = "BTC"
+		} else if strings.Contains(msg, "ethereum") || strings.Contains(msg, "eth") {
+			symbol = "ETH"
+		} else if strings.Contains(msg, "solana") || strings.Contains(msg, "sol") {
+			symbol = "SOL"
+		} else {
+			return "Maaf, saya tidak dapat menentukan aset investasi. Contoh: 'tambah investasi BTC 1 juta'"
+		}
+	}
+
+	// Determine investment type
+	invType := models.InvStock
+	if _, ok := services.CryptoSymbolMapping[symbol]; ok {
+		invType = models.InvCrypto
+	}
+
+	// Get current price if available
+	currentPrice := amount // Default to amount as unit price
+	if c.priceService != nil {
+		if invType == models.InvCrypto {
+			price, err := c.priceService.GetCryptoPrice(symbol, "IDR")
+			if err == nil && price > 0 {
+				currentPrice = price
+			}
+		} else {
+			price, err := c.priceService.GetStockPrice(symbol, true)
+			if err == nil && price > 0 {
+				currentPrice = price
+			}
+		}
+	}
+
+	// Calculate quantity based on amount
+	quantity := 1.0
+	if currentPrice > 0 {
+		quantity = amount / currentPrice
+	}
+
+	investment := models.Investment{
+		UserID:        userOID,
+		Name:          symbol,
+		Symbol:        strings.ToUpper(symbol),
+		Type:          invType,
+		Quantity:      quantity,
+		AverageCost:   currentPrice,
+		CurrentPrice:  currentPrice,
+		PurchaseDate:  time.Now(),
+		IsActive:      true,
+	}
+
+	created, err := c.investmentService.CreateInvestment(investment)
+	if err != nil {
+		return fmt.Sprintf("❌ Gagal menambahkan investasi: %v", err)
+	}
+
+	return fmt.Sprintf("✅ **Investasi Berhasil Ditambahkan!**\n\n📊 Aset: %s (%s)\n💰 Nilai: Rp%.0f\n📈 Jumlah: %.4f unit", created.Name, created.Symbol, amount, created.Quantity)
 }

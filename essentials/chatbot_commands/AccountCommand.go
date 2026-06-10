@@ -2,10 +2,13 @@ package chatbot_commands
 
 import (
 	"fmt"
+	"strings"
 
-	"financeapi/essentials/constants"
+	"financeapi/essentials/models"
 	"financeapi/essentials/services"
+	"financeapi/essentials/utils"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -25,8 +28,28 @@ func (c *AccountCommand) Handle(userID string, message string) string {
 		return "Error: Invalid user ID"
 	}
 
+	msg := strings.ToLower(message)
+
 	if c.accountService == nil {
 		return "Account service belum tersedia."
+	}
+
+	// Check for delete keyword
+	deleteKeywords := []string{"hapus", "delete", "remove"}
+	if utils.ContainsAny(msg, deleteKeywords) {
+		return c.handleDeleteAccount(userID, message)
+	}
+
+	// Check for edit keyword
+	editKeywords := []string{"edit", "ubah", "update", "ganti", "topup", "tarik"}
+	if utils.ContainsAny(msg, editKeywords) {
+		return c.handleEditAccount(userID, message)
+	}
+
+	// Check for create keyword
+	createKeywords := []string{"tambah", "add", "buat", "register", "buka"}
+	if utils.ContainsAny(msg, createKeywords) {
+		return c.handleCreateAccount(userID, message)
 	}
 
 	accounts, err := c.accountService.GetUserAccounts(userOID)
@@ -43,27 +66,27 @@ func (c *AccountCommand) Handle(userID string, message string) string {
 
 	for _, account := range accounts {
 		balance := account.CurrentBalance
-		if account.Type == constants.AccCredit {
+		if account.Type == models.AccountTypeCredit {
 			balance = -account.CurrentBalance
 		}
 		totalBalance += balance
 
 		icon := "🏦"
 		switch account.Type {
-		case constants.AccWallet:
+		case models.AccountTypeWallet:
 			icon = "👛"
-		case constants.AccCash:
+		case models.AccountTypeCash:
 			icon = "💵"
-		case constants.AccCredit:
+		case models.AccountTypeCredit:
 			icon = "💳"
-		case constants.AccSavings:
+		case models.AccountTypeSavings:
 			icon = "🎯"
-		case constants.AccInvestment:
+		case models.AccountTypeInvestment:
 			icon = "📈"
 		}
 
 		balanceStr := fmt.Sprintf("Rp%.0f", account.CurrentBalance)
-		if account.Type == constants.AccCredit {
+		if account.Type == models.AccountTypeCredit {
 			balanceStr = fmt.Sprintf("Rp%.0f (hutang)", account.CurrentBalance)
 		}
 
@@ -73,4 +96,131 @@ func (c *AccountCommand) Handle(userID string, message string) string {
 	summary += fmt.Sprintf("💰 Total: Rp%.0f", totalBalance)
 
 	return summary
+}
+
+func (c *AccountCommand) handleCreateAccount(userID, message string) string {
+	userOID, _ := primitive.ObjectIDFromHex(userID)
+	msg := strings.ToLower(message)
+
+	name := utils.ExtractAccountNameFromMessage(msg)
+	if name == "" {
+		return "Maaf, saya tidak dapat menentukan nama akun. Contoh: 'tambah akun bank bca'"
+	}
+
+	// Determine account type
+	accountType := models.AccountTypeBank
+	if utils.ContainsAny(msg, []string{"e-wallet", "ewallet", "gojek", "grab", "dana", "ovo", "linkaja"}) {
+		accountType = models.AccountTypeWallet
+	} else if utils.ContainsAny(msg, []string{"cash", "tunai"}) {
+		accountType = models.AccountTypeCash
+	} else if utils.ContainsAny(msg, []string{"kredit", "credit", "card"}) {
+		accountType = models.AccountTypeCredit
+	} else if utils.ContainsAny(msg, []string{"savings", "tabungan"}) {
+		accountType = models.AccountTypeSavings
+	}
+
+	initialBalance := utils.ParseIndonesianAmount(msg)
+
+	account := models.Account{
+		UserID:          userOID,
+		Name:            strings.Title(name),
+		Type:            accountType,
+		Institution:     strings.Title(name),
+		CurrentBalance:  initialBalance,
+	}
+
+	created, err := c.accountService.CreateAccount(account)
+	if err != nil {
+		return fmt.Sprintf("❌ Gagal membuat akun: %v", err)
+	}
+
+	return fmt.Sprintf("✅ **Akun Berhasil Dibuat!**\n\n🏦 Nama: %s\n💰 Tipe: %s\n💵 Saldo: Rp%.0f", created.Name, created.Type, created.CurrentBalance)
+}
+
+func (c *AccountCommand) handleEditAccount(userID, message string) string {
+	userOID, _ := primitive.ObjectIDFromHex(userID)
+	msg := strings.ToLower(message)
+
+	accounts, err := c.accountService.GetUserAccounts(userOID)
+	if err != nil || len(accounts) == 0 {
+		return "Tidak ada akun untuk diedit."
+	}
+
+	// Try to find account by name
+	accountName := utils.ExtractAccountNameFromMessage(msg)
+	var targetAccount *models.Account
+
+	for i := range accounts {
+		if accountName != "" && strings.Contains(strings.ToLower(accounts[i].Name), accountName) {
+			targetAccount = &accounts[i]
+			break
+		}
+	}
+
+	if targetAccount == nil && len(accounts) > 0 {
+		targetAccount = &accounts[0]
+	}
+
+	if targetAccount == nil {
+		return "Tidak dapat menemukan akun."
+	}
+
+	updates := bson.M{}
+
+	// Check for balance update (topup/withdraw)
+	newBalance := utils.ParseIndonesianAmount(msg)
+	if newBalance > 0 {
+		if utils.ContainsAny(msg, []string{"topup", "tambah"}) {
+			newBalance = targetAccount.CurrentBalance + newBalance
+		} else if utils.ContainsAny(msg, []string{"tarik", "withdraw", "kurangi"}) {
+			newBalance = targetAccount.CurrentBalance - newBalance
+		}
+		updates["current_balance"] = newBalance
+	}
+
+	if len(updates) == 0 {
+		return "Tidak ada perubahan yang diberikan."
+	}
+
+	_, err = c.accountService.UpdateAccount(targetAccount.ID, userOID, updates)
+	if err != nil {
+		return fmt.Sprintf("❌ Gagal edit akun: %v", err)
+	}
+
+	return fmt.Sprintf("✅ Akun berhasil diupdate! %s - Rp%.0f", targetAccount.Name, newBalance)
+}
+
+func (c *AccountCommand) handleDeleteAccount(userID, message string) string {
+	userOID, _ := primitive.ObjectIDFromHex(userID)
+	msg := strings.ToLower(message)
+
+	accounts, err := c.accountService.GetUserAccounts(userOID)
+	if err != nil || len(accounts) == 0 {
+		return "Tidak ada akun untuk dihapus."
+	}
+
+	accountName := utils.ExtractAccountNameFromMessage(msg)
+	var targetAccount *models.Account
+
+	for i := range accounts {
+		if accountName != "" && strings.Contains(strings.ToLower(accounts[i].Name), accountName) {
+			targetAccount = &accounts[i]
+			break
+		}
+	}
+
+	if targetAccount == nil && len(accounts) > 0 {
+		targetAccount = &accounts[0]
+	}
+
+	if targetAccount == nil {
+		return "Tidak dapat menemukan akun."
+	}
+
+	err = c.accountService.DeleteAccount(targetAccount.ID, userOID)
+	if err != nil {
+		return fmt.Sprintf("❌ Gagal hapus akun: %v", err)
+	}
+
+	return fmt.Sprintf("🗑️ Akun berhasil dihapus: %s", targetAccount.Name)
 }

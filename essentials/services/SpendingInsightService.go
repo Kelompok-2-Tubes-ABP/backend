@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -147,7 +148,9 @@ func (s *SpendingInsightService) calculateSavingsRate(userID primitive.ObjectID)
 		return 50, []string{"Connect transaction service for accurate savings rate"}
 	}
 
-	startOfMonth := time.Date(time.Now().Year(), time.Now().Month(), 1, 0, 0, 0, 0, time.UTC)
+	// Use local timezone for consistent date handling
+	now := time.Now()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
 	totalIncome := 0.0
 	totalExpense := 0.0
@@ -158,7 +161,7 @@ func (s *SpendingInsightService) calculateSavingsRate(userID primitive.ObjectID)
 	}
 
 	for _, tx := range transactions {
-		if tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth) {
+		if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && tx.Date.Year() == now.Year() && tx.Date.Month() == now.Month() {
 			if utils.IsIncomeByType(tx) {
 				totalIncome += tx.Amount
 			} else {
@@ -216,12 +219,14 @@ func (s *SpendingInsightService) calculateDebtLevel(userID primitive.ObjectID) (
 		return 100, []string{"Great job! You're debt-free"}
 	}
 
-	totalIncome := s.getMonthlyIncome(userID)
-	if totalIncome == 0 {
-		return 50, []string{"Unable to calculate debt-to-income ratio"}
+	monthlyIncome := s.getMonthlyIncome(userID)
+	if monthlyIncome == 0 {
+		return 50, []string{"Unable to calculate debt-to-income ratio - no income recorded"}
 	}
 
-	debtToIncome := (totalDebt / totalIncome) * 100
+	// Use monthly payment for DTI calculation (standard financial practice)
+	monthlyPayment := summary["total_monthly_payment"].(float64)
+	debtToIncome := (monthlyPayment / monthlyIncome) * 100
 
 	var score int
 	if debtToIncome <= 10 {
@@ -238,10 +243,16 @@ func (s *SpendingInsightService) calculateDebtLevel(userID primitive.ObjectID) (
 
 	var recommendations []string
 	if debtToIncome > 36 {
-		recommendations = append(recommendations, "Your debt-to-income ratio is high (36%+). Consider a debt payoff plan")
+		recommendations = append(recommendations, fmt.Sprintf("Your debt-to-income ratio is high (%.0f%%). Consider a debt payoff plan", debtToIncome))
 	}
 	if totalDebtCount > 3 {
 		recommendations = append(recommendations, "Consider consolidating your debts to simplify payments")
+	}
+	if monthlyPayment > monthlyIncome*0.5 {
+		recommendations = append(recommendations, "More than 50% of income goes to debt payments - prioritize reducing this")
+	}
+	if totalDebt > monthlyIncome*6 {
+		recommendations = append(recommendations, fmt.Sprintf("Total debt (%.0f) exceeds 6 months of income - focus on aggressive debt payoff", totalDebt))
 	}
 
 	return score, recommendations
@@ -253,15 +264,20 @@ func (s *SpendingInsightService) calculateBudgetAdherence(userID primitive.Objec
 	}
 
 	userIDStr := userID.Hex()
-
-	budgets, err := s.budgetService.GetUserBudgets(userIDStr)
-	if err != nil || len(budgets) == 0 {
-		return 50, []string{"Create a budget to track spending"}
-	}
+	currentMonth := time.Now().Format("2006-01")
 
 	budgetsWithSpending, err := s.budgetService.GetAllBudgetsWithSpending(userIDStr)
 	if err != nil {
 		return 60, []string{}
+	}
+
+	// If no budgets, check current month specifically
+	if len(budgetsWithSpending) == 0 {
+		currentMonthBudget, err := s.budgetService.GetBudgetWithSpending(userIDStr, currentMonth)
+		if err != nil {
+			return 50, []string{"Create a budget to track spending"}
+		}
+		budgetsWithSpending = append(budgetsWithSpending, currentMonthBudget)
 	}
 
 	overBudgetCount := 0
@@ -269,10 +285,11 @@ func (s *SpendingInsightService) calculateBudgetAdherence(userID primitive.Objec
 	exceedPercent := 0.0
 
 	for _, b := range budgetsWithSpending {
-		spent := b["spent"].(float64)
-		budgetAmount := b["budget_amount"].(float64)
+		spent := b["spending"].(float64)
+		budget := b["budget"].(models.MonthlyBudget)
+		budgetAmount := budget.Limit
 
-		if spent > budgetAmount {
+		if budgetAmount > 0 && spent > budgetAmount {
 			overBudgetCount++
 			exceedPercent += (spent - budgetAmount) / budgetAmount * 100
 		}
@@ -313,7 +330,8 @@ func (s *SpendingInsightService) calculateExpenseControl(userID primitive.Object
 		return 60, []string{}
 	}
 
-	threeMonthsAgo := time.Now().AddDate(0, -3, 0)
+	now := time.Now()
+	threeMonthsAgo := now.AddDate(0, -3, 0)
 
 	transactions, err := s.transactionService.ShowTransaction(userID.Hex())
 	if err != nil {
@@ -342,21 +360,29 @@ func (s *SpendingInsightService) calculateExpenseControl(userID primitive.Object
 	}
 	avgExpense := sum / float64(len(recentExpenses))
 
+	// Dynamic anomaly detection: flag transactions > 3x average expense
 	anomalyCount := 0
+	anomalyThreshold := avgExpense * 3
+	if anomalyThreshold < 50000 { // Minimum threshold of 50k to avoid false positives on small budgets
+		anomalyThreshold = 50000
+	}
+
 	for _, exp := range recentExpenses {
-		if exp > avgExpense*2 && exp > 100000 {
+		if exp > anomalyThreshold {
 			anomalyCount++
 		}
 	}
 
+	// Get last 3 months of data
 	var monthTotals []float64
 	for i := 2; i >= 0; i-- {
-		month := time.Now().AddDate(0, -i, 1).Format("2006-01")
+		month := now.AddDate(0, -i, 1).Format("2006-01")
 		monthTotals = append(monthTotals, monthlyExpenses[month])
 	}
 
 	var trend float64
-	if len(monthTotals) >= 2 {
+	// Division by zero protection
+	if len(monthTotals) >= 2 && monthTotals[0] > 0 {
 		trend = (monthTotals[len(monthTotals)-1] - monthTotals[0]) / monthTotals[0] * 100
 	}
 
@@ -375,10 +401,13 @@ func (s *SpendingInsightService) calculateExpenseControl(userID primitive.Object
 
 	var recommendations []string
 	if anomalyCount > 2 {
-		recommendations = append(recommendations, "You have several large unusual expenses. Review them for potential savings")
+		recommendations = append(recommendations, fmt.Sprintf("You have %d large unusual expenses. Review them for potential savings", anomalyCount))
 	}
 	if trend > 15 {
 		recommendations = append(recommendations, "Your expenses are increasing month-over-month. Consider cutting back")
+	}
+	if avgExpense > 0 && anomalyThreshold > avgExpense*5 {
+		recommendations = append(recommendations, "Your spending is relatively stable with few large purchases")
 	}
 
 	return score, recommendations
@@ -389,7 +418,7 @@ func (s *SpendingInsightService) getMonthlyIncome(userID primitive.ObjectID) flo
 		return 0
 	}
 
-	startOfMonth := time.Date(time.Now().Year(), time.Now().Month(), 1, 0, 0, 0, 0, time.UTC)
+	now := time.Now()
 	totalIncome := 0.0
 
 	transactions, err := s.transactionService.ShowTransaction(userID.Hex())
@@ -398,7 +427,8 @@ func (s *SpendingInsightService) getMonthlyIncome(userID primitive.ObjectID) flo
 	}
 
 	for _, tx := range transactions {
-		if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && utils.IsIncomeByType(tx) {
+		// Filter to current month only
+		if tx.Date.Year() == now.Year() && tx.Date.Month() == now.Month() && utils.IsIncomeByType(tx) {
 			totalIncome += tx.Amount
 		}
 	}
@@ -407,7 +437,7 @@ func (s *SpendingInsightService) getMonthlyIncome(userID primitive.ObjectID) flo
 }
 
 func (s *SpendingInsightService) calculateSavingsRatePercent(userID primitive.ObjectID) float64 {
-	startOfMonth := time.Date(time.Now().Year(), time.Now().Month(), 1, 0, 0, 0, 0, time.UTC)
+	now := time.Now()
 
 	totalIncome := 0.0
 	totalExpense := 0.0
@@ -418,7 +448,8 @@ func (s *SpendingInsightService) calculateSavingsRatePercent(userID primitive.Ob
 
 	transactions, _ := s.transactionService.ShowTransaction(userID.Hex())
 	for _, tx := range transactions {
-		if tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth) {
+		// Filter to current month only
+		if tx.Date.Year() == now.Year() && tx.Date.Month() == now.Month() {
 			if utils.IsIncomeByType(tx) {
 				totalIncome += tx.Amount
 			} else {
@@ -444,40 +475,52 @@ func (s *SpendingInsightService) calculateDebtToIncomeRatio(userID primitive.Obj
 		return 0
 	}
 
-	totalDebt := summary["total_debt"].(float64)
+	// Use monthly payment for DTI (standard financial practice)
+	monthlyPayment := summary["total_monthly_payment"].(float64)
 	monthlyIncome := s.getMonthlyIncome(userID)
 
 	if monthlyIncome == 0 {
 		return 0
 	}
 
-	return math.Round((totalDebt / monthlyIncome) * 100)
+	return math.Round((monthlyPayment / monthlyIncome) * 100)
 }
 
 func (s *SpendingInsightService) calculateEmergencyFundMonths(userID primitive.ObjectID) float64 {
-	if s.accountService == nil {
-		return 0
-	}
-
-	accounts, err := s.accountService.GetUserAccounts(userID)
-	if err != nil {
-		return 0
-	}
-
+	now := time.Now()
 	totalSavings := 0.0
-	for _, acc := range accounts {
-		if acc.Type == models.AccountTypeBank || acc.Type == models.AccountTypeCash {
-			totalSavings += acc.CurrentBalance
+
+	// 1. Include bank and cash accounts
+	if s.accountService != nil {
+		accounts, err := s.accountService.GetUserAccounts(userID)
+		if err == nil {
+			for _, acc := range accounts {
+				if acc.Type == models.AccountTypeBank || acc.Type == models.AccountTypeCash {
+					totalSavings += acc.CurrentBalance
+				}
+			}
 		}
 	}
 
-	startOfMonth := time.Date(time.Now().Year(), time.Now().Month(), 1, 0, 0, 0, 0, time.UTC)
-	monthlyExpenses := 0.0
+	// 2. Include savings goals (liquid savings)
+	if s.savingsGoalService != nil {
+		goals, err := s.savingsGoalService.GetUserSavingsGoals(userID.Hex())
+		if err == nil {
+			for _, goal := range goals {
+				// Only count active goals with progress
+				if goal.Status == "active" && goal.CurrentAmount > 0 {
+					totalSavings += goal.CurrentAmount
+				}
+			}
+		}
+	}
 
+	// Calculate monthly expenses for current month
+	monthlyExpenses := 0.0
 	if s.transactionService != nil {
 		transactions, _ := s.transactionService.ShowTransaction(userID.Hex())
 		for _, tx := range transactions {
-			if (tx.Date.After(startOfMonth) || tx.Date.Equal(startOfMonth)) && utils.IsOutcomeByType(tx) {
+			if tx.Date.Year() == now.Year() && tx.Date.Month() == now.Month() && utils.IsOutcomeByType(tx) {
 				monthlyExpenses += tx.Amount
 			}
 		}
@@ -487,5 +530,12 @@ func (s *SpendingInsightService) calculateEmergencyFundMonths(userID primitive.O
 		return 0
 	}
 
-	return math.Round(totalSavings / monthlyExpenses)
+	emergencyMonths := math.Round(totalSavings / monthlyExpenses)
+
+	// Cap at reasonable maximum (e.g., 24 months)
+	if emergencyMonths > 24 {
+		emergencyMonths = 24
+	}
+
+	return emergencyMonths
 }

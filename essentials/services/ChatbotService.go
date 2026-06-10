@@ -181,58 +181,118 @@ func (s *ChatbotService) ProcessMessage(userID string, message string, sessionID
 func (s *ChatbotService) analyzeIntent(message string, context map[string]interface{}) (bool, string, map[string]interface{}) {
 	msg := strings.ToLower(message)
 
-	// Account - saldo, bank, e-wallet, akun, rekening
-	if containsAny(msg, []string{"saldo", "uang di", "bank", "e-wallet", "kartu debit", "kartu kredit", "akun", "rekening", "cash", "tunai"}) {
+	// === PRIORITY 1: Explicit action words (buat, tambah, hapus, edit) ===
+	// Check for create/intent FIRST to avoid misclassification
+
+	// Budget creation - "buat budget", "buatkan budget", "mau budget"
+	if utils.ContainsAny(msg, []string{"buat budget", "buatkan budget", "mau budget", "ingin budget", "butuh budget"}) {
+		return true, "budget", map[string]interface{}{"message": message}
+	}
+
+	// Budget edit/update - "edit budget", "ubah budget", "update budget", "ganti budget"
+	if utils.ContainsAny(msg, []string{"edit budget", "ubah budget", "update budget", "ganti budget", "rubah budget"}) {
+		return true, "budget", map[string]interface{}{"message": message}
+	}
+
+	// Budget delete - "hapus budget", "delete budget"
+	if utils.ContainsAny(msg, []string{"hapus budget", "delete budget", "hapus anggaran"}) {
+		return true, "budget", map[string]interface{}{"message": message}
+	}
+
+	// Account creation - "tambah akun", "buka akun", "daftar akun", "buat akun"
+	if utils.ContainsAny(msg, []string{"tambah akun", "buka akun", "daftar akun", "buat akun", "register akun", "bikin akun", "buat rekening", "tambah rekening", "buka rekening"}) {
+		return true, "account", map[string]interface{}{"message": message}
+	}
+
+	// Account edit/update - "edit akun", "ubah akun", "update saldo"
+	if utils.ContainsAny(msg, []string{"edit akun", "ubah akun", "update akun", "ganti akun", "edit rekening", "topup", "tarik"}) {
+		return true, "account", map[string]interface{}{"message": message}
+	}
+
+	// Account delete - "hapus akun", "delete akun"
+	if utils.ContainsAny(msg, []string{"hapus akun", "delete akun", "hapus rekening"}) {
+		return true, "account", map[string]interface{}{"message": message}
+	}
+
+	// Recurring/subscription creation - "tambah langganan", "buatkan langganan", "langganan baru"
+	if utils.ContainsAny(msg, []string{"tambah langganan", "buatkan langganan", "langganan baru", "subscription baru", "buatkan subscription", "daftarin langganan"}) {
+		return true, "recurring", map[string]interface{}{"message": message}
+	}
+
+	// Recurring edit/delete - "edit langganan", "hapus langganan", "pause subscription"
+	if utils.ContainsAny(msg, []string{"edit langganan", "ubah langganan", "hapus langganan", "delete langganan", "pause langganan", "batal langganan"}) {
+		return true, "recurring", map[string]interface{}{"message": message}
+	}
+
+	// Savings creation - "buat tabungan", "buatkan tabungan", "target baru", "goal baru"
+	if utils.ContainsAny(msg, []string{"buat tabungan", "buatkan tabungan", "target baru", "goal baru", "tabungan baru", "target tabungan"}) {
+		return true, "savings", map[string]interface{}{"message": message}
+	}
+
+	// === PRIORITY 2: Standalone action words with context ===
+
+	// Budget - standalone keywords (check if not part of transaction context)
+	if utils.ContainsAny(msg, []string{"budget", "anggaran", "limit budget", "planning budget"}) &&
+		!utils.ContainsAny(msg, []string{"pengeluaran", "transaction", "transaksi", "beli", "makan"}) {
+		return true, "budget", map[string]interface{}{}
+	}
+
+	// Recurring - transaksi berulang (check standalone)
+	if utils.ContainsAny(msg, []string{"recurring", "berulang", "auto debit", "otomatis", "langganan", "subscription", "member"}) {
+		return true, "recurring", map[string]interface{}{}
+	}
+
+	// Account - saldo, bank, e-wallet (check standalone)
+	if utils.ContainsAny(msg, []string{"saldo", "uang di", "bank", "e-wallet", "kartu debit", "kartu kredit", "akun", "rekening", "cash", "tunai"}) {
 		return true, "account", map[string]interface{}{}
 	}
 
-	// Investment - crypto, bitcoin, portfolio, stock, saham, harga (specific requests only)
-	if containsAny(msg, []string{"crypto", "bitcoin", "ethereum", "invest", "portfolio", "investasi", "trading", "saham", "stock", "stocks", "aapl", "googl", "msft", "tsla", "tesla", "apple", "google", "microsoft", "harga", "price"}) {
+	// === PRIORITY 3: Transaction (only if explicit expense/income words) ===
+	// Only trigger transaction if there's clear expense/income context
+	expenseKeywords := []string{"pengeluaran", "income", "pemasukan", "gajian", "gaji", "dapet", "dapat", "earned", "salary", "spent", "uang keluar", "uang masuk"}
+	if utils.ContainsAny(msg, expenseKeywords) {
+		return true, "transaction", map[string]interface{}{"message": message}
+	}
+
+	// Transaction with explicit spending words
+	if utils.ContainsAny(msg, []string{"beli ", "buy ", "purchase", "bayar ", "pay ", "transaction", "transaksi"}) {
+		return true, "transaction", map[string]interface{}{"message": message}
+	}
+
+	// === PRIORITY 4: Other intents ===
+
+	// Investment - crypto, bitcoin, portfolio, stock, saham, harga
+	if utils.ContainsAny(msg, []string{"crypto", "bitcoin", "ethereum", "invest", "portfolio", "investasi", "trading", "saham", "stock", "stocks", "aapl", "googl", "msft", "tsla", "tesla", "apple", "google", "microsoft"}) {
 		return true, "investment", map[string]interface{}{}
 	}
 
 	// Investment suggestions/recommendations
-	if containsAny(msg, []string{"saran", "recommend", "suggest", "tips", "bagus", "good", "ide"}) {
+	if utils.ContainsAny(msg, []string{"saran", "recommend", "suggest", "tips", "bagus", "good", "ide"}) {
 		return true, "investment", map[string]interface{}{}
 	}
 
-	// Debt - hutang, cicilan, pinjaman, credit
-	if containsAny(msg, []string{"hutang", "debt", "pinjaman", "kredit", "credit", "cicilan", "loan"}) {
+	// Debt - hutang, cicilan, pinjaman
+	if utils.ContainsAny(msg, []string{"hutang", "debt", "pinjaman", "kredit", "cicilan", "loan"}) {
 		return true, "debt", map[string]interface{}{"message": message}
 	}
 
-	// Transaction - transaksi, pengeluaran, income
-	if containsAny(msg, []string{"pengeluaran", "income", "pemasukan", "transaction", "beli", "jual", "belanja", "uang keluar", "uang masuk", "transaksi", "gajian", "gaji", "dapet", "dapat", "earned", "salary", "spent", "beli", "buy", "purchase", "makan", "food", "lunch", "dinner", "breakfast"}) {
-		return true, "transaction", map[string]interface{}{"message": message}
-	}
-
-	// Savings - tabungan, target, save (after transaction to prioritize adding income)
-	if containsAny(msg, []string{"tabungan", "savings", "goal", "target", "menabung", "nabung", "save", "saved", "vacation", "holiday"}) {
+	// Savings - tabungan, target, save
+	if utils.ContainsAny(msg, []string{"tabungan", "savings", "goal", "target", "menabung", "nabung", "save", "saved"}) {
 		return true, "savings", map[string]interface{}{"message": message}
 	}
 
-	// Budget
-	if containsAny(msg, []string{"budget", "anggaran", "limit"}) {
-		return true, "budget", map[string]interface{}{}
-	}
-
 	// Spending Analysis
-	if containsAny(msg, []string{"analisa", "analysis", "spending", "pola", "pengeluaran", "total", "cek", "lihat", "berapa", "bulanan", "bulan ini", "bulan lalu"}) {
+	if utils.ContainsAny(msg, []string{"analisa", "analysis", "spending", "pola", "total", "cek", "lihat", "berapa", "bulanan", "bulan ini", "bulan lalu"}) {
 		return true, "spending", map[string]interface{}{}
 	}
 
 	// Bills & Recurring
-	if containsAny(msg, []string{"bill", "tagihan", "reminder", "jatuh tempo", "pembayaran", "bulanan"}) {
+	if utils.ContainsAny(msg, []string{"bill", "tagihan", "reminder", "jatuh tempo", "pembayaran"}) {
 		return true, "bills", map[string]interface{}{"message": message}
 	}
 
-	// Recurring - transaksi berulang
-	if containsAny(msg, []string{"recurring", "berulang", "auto", "otomatis", "langganan", "subscription"}) {
-		return true, "recurring", map[string]interface{}{}
-	}
-
 	// Financial Health
-	if containsAny(msg, []string{"health", "kesehatan", "keuangan", "summary", "ringkasan"}) {
+	if utils.ContainsAny(msg, []string{"health", "kesehatan", "keuangan", "summary", "ringkasan"}) {
 		return true, "health", map[string]interface{}{}
 	}
 
@@ -247,17 +307,12 @@ func (s *ChatbotService) executeTool(toolName string, args map[string]interface{
 		msg = m
 	}
 
-	// Route to command pattern if registered
+	// Route to command pattern
 	if cmd, exists := s.commands[toolName]; exists {
 		return cmd.Handle(userID, msg)
 	}
 
-	// Legacy routing (to be removed once all commands are migrated)
-	switch toolName {
-
-	default:
-		return "Maaf, saya tidak mengerti. Bisa jelaskan lagi?"
-	}
+	return "Maaf, saya tidak mengerti. Bisa jelaskan lagi?"
 }
 
 // callOllama - Call Ollama local AI
@@ -608,14 +663,4 @@ func (s *ChatbotService) GetChatHistory(userID, sessionID string) ([]models.Chat
 	var messages []models.ChatMessage
 	err = cursor.All(ctx, &messages)
 	return messages, err
-}
-
-// Helper functions
-func containsAny(s string, keywords []string) bool {
-	for _, kw := range keywords {
-		if strings.Contains(s, kw) {
-			return true
-		}
-	}
-	return false
 }

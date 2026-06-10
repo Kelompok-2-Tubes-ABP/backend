@@ -29,14 +29,14 @@ func (c *DebtCommand) Handle(userID string, message string) string {
 
 	// 1. Detect payment intent
 	paymentKeywords := []string{"bayar", "pay", "cicil", "setor", "bayarin"}
-	if containsAny(msg, paymentKeywords) {
+	if utils.ContainsAny(msg, paymentKeywords) {
 		return c.handleDebtPayment(userID, message)
 	}
 
 	// 2. Detect creation intent
 	creationKeywords := []string{"ada", "tambah", "catat", "buat", "punya", "mempunyai", "baru"}
 	amount := utils.ParseIndonesianAmount(message)
-	if (containsAny(msg, creationKeywords) && amount > 0) || (amount > 0 && containsAny(msg, []string{"bunga", "tenor", "bulan"})) {
+	if (utils.ContainsAny(msg, creationKeywords) && amount > 0) || (amount > 0 && utils.ContainsAny(msg, []string{"bunga", "tenor", "bulan"})) {
 		return c.handleAddDebt(userID, message)
 	}
 
@@ -194,13 +194,4 @@ func (c *DebtCommand) handleDebtPayment(userID, message string) string {
 	}
 
 	return res
-}
-
-func containsAny(s string, keywords []string) bool {
-	for _, kw := range keywords {
-		if strings.Contains(s, kw) {
-			return true
-		}
-	}
-	return false
 }
