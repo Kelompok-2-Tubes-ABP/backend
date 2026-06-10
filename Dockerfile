@@ -21,11 +21,9 @@ ARG VERSION=dev
 ARG COMMIT=local
 ARG BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags "
-    -X main.BuildVersion=${VERSION}
-    -X main.BuildTime=${BUILD_TIME}
-    -X main.BuildCommit=${COMMIT}
-" -o financeapi ./main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags "-X main.BuildVersion=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.BuildCommit=${COMMIT}" \
+    -o financeapi ./main.go
 
 # Runtime stage
 FROM alpine:3.19
