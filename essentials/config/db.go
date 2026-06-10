@@ -7,18 +7,27 @@ import (
 	"os"
 	"time"
 
+	"github.com/joho/godotenv"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func ConnectDB() *mongo.Client {
-	// Check for environment variable first (for Docker), fallback to hardcoded
-	mongoURI := os.Getenv("MONGO_URI")
+	// Load .env file if exists
+	godotenv.Load()
+
+	// Check for environment variable (supports both MONGODB_URI and MONGO_URI)
+	mongoURI := os.Getenv("MONGODB_URI")
 	if mongoURI == "" {
-		// Hardcoded for development - in production, use MONGO_URI env var
-		mongoURI = "mongodb+srv://foxyninenineee:akame112@clusterfinanceapi.ccf3ywa.mongodb.net/?appName=ClusterFinanceApi"
+		mongoURI = os.Getenv("MONGO_URI")
 	}
+
+	if mongoURI == "" {
+		log.Fatal("Error: MONGODB_URI or MONGO_URI environment variable is not set")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
