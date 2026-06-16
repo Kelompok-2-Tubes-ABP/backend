@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"errors"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -54,6 +55,12 @@ type ChatbotService struct {
 
 	// Rate limiting
 	rateLimitManager *ChatbotRateLimitManager
+
+	// Enhanced context services
+	financeProfileService      *FinanceProfileService
+	proactiveInsightService   *ProactiveInsightService
+	conversationContextService *ConversationContextService
+	feedbackLearningService   *FeedbackLearningService
 
 	commands map[string]ChatbotCommand
 }
@@ -147,6 +154,26 @@ func (s *ChatbotService) SetRAGService(rag *RAGService) {
 	s.ragService = rag
 }
 
+// SetFinanceProfileService - Inject FinanceProfileService
+func (s *ChatbotService) SetFinanceProfileService(fps *FinanceProfileService) {
+	s.financeProfileService = fps
+}
+
+// SetProactiveInsightService - Inject ProactiveInsightService
+func (s *ChatbotService) SetProactiveInsightService(pis *ProactiveInsightService) {
+	s.proactiveInsightService = pis
+}
+
+// SetConversationContextService - Inject ConversationContextService
+func (s *ChatbotService) SetConversationContextService(ccs *ConversationContextService) {
+	s.conversationContextService = ccs
+}
+
+// SetFeedbackLearningService - Inject FeedbackLearningService
+func (s *ChatbotService) SetFeedbackLearningService(fls *FeedbackLearningService) {
+	s.feedbackLearningService = fls
+}
+
 // RegisterCommand attaches a new command handler to the chatbot
 func (s *ChatbotService) RegisterCommand(intentName string, cmd ChatbotCommand) {
 	if s.commands == nil {
@@ -156,8 +183,17 @@ func (s *ChatbotService) RegisterCommand(intentName string, cmd ChatbotCommand) 
 }
 
 // ProcessMessage - Main entry point
-
+// ProcessMessage - Main entry point
 func (s *ChatbotService) ProcessMessage(userID string, message string, sessionID string) (string, error) {
+	// Input validation
+	if userID == "" {
+		return "", errors.New("userID is required")
+	}
+	if message == "" {
+		return "", errors.New("message is required")
+	}
+
+	// Rate limiting check
 	// Rate limiting check
 	if s.rateLimitManager != nil {
 		// Check request rate limit
@@ -206,34 +242,18 @@ func (s *ChatbotService) ProcessMessage(userID string, message string, sessionID
 	context["conversation_history"] = conversationHistory
 
 	// Analyze intent
-	needsTool, toolName, toolArgs := s.analyzeIntent(message, context)
+	needsTool, toolName, toolArgs := s.analyzeIntent(userID, message, context)
 
 	var response string
 	if needsTool {
 		response = s.executeTool(toolName, toolArgs, userID, context)
 	} else {
-		// Use external AI if configured, otherwise Ollama
-		if s.aiAPIKey != "" {
-			// External AI with conversation history
-			resp, err := s.callExternalAIWithHistory(message, context, conversationHistory)
-			if err != nil {
-				// Fallback to Ollama
-				resp, err = s.callOllamaWithHistory(message, context, conversationHistory)
-				if err != nil {
-					return "", fmt.Errorf("AI services unavailable: external AI error: %v, Ollama error: %v", err, err)
-				}
-				response = resp
-			} else {
-				response = resp
-			}
-		} else {
-			// Use Ollama
-			resp, err := s.callOllamaWithHistory(message, context, conversationHistory)
-			if err != nil {
-				return "", err
-			}
-			response = resp
+		// Use AI with retry logic
+		resp, err := s.callWithRetry(message, context, conversationHistory)
+		if err != nil {
+			return "", fmt.Errorf("AI services unavailable after retries: %w", err)
 		}
+		response = resp
 	}
 
 	// Save bot response
@@ -256,149 +276,89 @@ func (s *ChatbotService) ProcessMessage(userID string, message string, sessionID
 	return response, nil
 }
 
-// analyzeIntent - Detect what user wants with improved specificity
-func (s *ChatbotService) analyzeIntent(message string, context map[string]interface{}) (bool, string, map[string]interface{}) {
-	msg := strings.ToLower(message)
+// analyzeIntent - Detect what user wants using NLU
+func (s *ChatbotService) analyzeIntent(userID string, message string, context map[string]interface{}) (bool, string, map[string]interface{}) {
+	// === Step 1: Use NEW NLU for intent detection ===
+	intent := utils.DetectIntent(message)
+	_, confidence := utils.DetectIntentWithConfidence(message)
+	
+	// === Step 1.5: Detect sentiment for empathetic responses ===
+	sentiment := utils.DetectSentiment(message)
+	sentimentCtx := utils.GetSentimentContext(sentiment)
 
-	// === PRIORITY 0: Question Detection (FIRST - before all command checks) ===
-	// If the message is a question without explicit action keywords, send to AI
-	questionKeywords := []string{"?", "bagaimana", "apa", "kenapa", "mengapa", "tips", "saran", "rekomendasi", "jelaskan", "terangkan", "gimana", "berapa sih", "siapas", "mana yang", "bedanya", "apakah", "bisakah", "seberapa", "kenapa harus", "cara", "apa saja", "apanya", "kenapa harus", "apakah bisa"}
-	actionKeywords := []string{"buat", "tambah", "hapus", "edit", "ubah", "beli", "jual", "bayar", "transfer", "keluarkan", "dapat", "cek", "lihat"}
-
-	// Greeting/small talk - route to AI
-	greetingKeywords := []string{"halo", "hai", "hi", "hello", "helo", "pagi", "siang", "sore", "malam", "terima kasih", "thanks", "thank you", "makasih", "ok", "oke", "siap", "ya", "yap", "yoi", "yo", "tapi", "nah", "oh", "iya", "sip"}
-
-	// Check for simple greetings or acknowledgments first
-	if utils.ContainsAny(msg, greetingKeywords) && len(strings.Fields(msg)) <= 3 {
-		return true, "ai", map[string]interface{}{"message": message}
+	// === Step 1.6: Check learned feedback ===
+	if s.feedbackLearningService != nil {
+		if correctedIntent, found := s.feedbackLearningService.GetCorrectedIntent(userID, message); found {
+			intent = correctedIntent
+		}
 	}
 
-	if utils.ContainsAny(msg, questionKeywords) && !utils.ContainsAny(msg, actionKeywords) {
-		return true, "ai", map[string]interface{}{"message": message}
+	// === Step 2: Check for conversation context references ("itu", "yang ini") ===
+	if s.conversationContextService != nil {
+		lastTopic, _, _ := s.conversationContextService.ResolveReference("", "", message)
+		if lastTopic != "" && lastTopic != "ai" {
+			// User is referring to previous topic
+			intent = lastTopic
+		}
 	}
 
-	// === PRIORITY 1: Explicit action words (buat, tambah, hapus, edit) ===
-	// Check for create/intent FIRST to avoid misclassification
-
-	// Budget creation - "buat budget", "buatkan budget", "mau budget"
-	if utils.ContainsAny(msg, []string{"buat budget", "buatkan budget", "mau budget", "ingin budget", "butuh budget"}) {
-		return true, "budget", map[string]interface{}{"message": message}
+	// === Step 3: Extract entities for tool arguments ===
+	entities := utils.ExtractEntities(message)
+	toolArgs := map[string]interface{}{
+		"message":   message,
+		"action":    entities.Action,
+		"amount":    entities.Amount,
+		"category":  entities.Category,
+		"note":      entities.Note,
+		"time":      entities.Time,
+		"confidence": confidence,
+		"sentiment":  sentimentCtx["sentiment"],
+		"needs_empathy": sentimentCtx["needs_empathy"],
+		"needs_urgency": sentimentCtx["needs_urgency"],
 	}
 
-	// Budget edit/update - "edit budget", "ubah budget", "update budget", "ganti budget"
-	if utils.ContainsAny(msg, []string{"edit budget", "ubah budget", "update budget", "ganti budget", "rubah budget"}) {
-		return true, "budget", map[string]interface{}{"message": message}
+	// === Step 4: Route based on intent ===
+	// If AI intent with low confidence, send to AI
+	if intent == "ai" {
+		return true, "ai", toolArgs
 	}
 
-	// Budget delete - "hapus budget", "delete budget"
-	if utils.ContainsAny(msg, []string{"hapus budget", "delete budget", "hapus anggaran"}) {
-		return true, "budget", map[string]interface{}{"message": message}
+	// Check if this is a command we support
+	supportedIntents := map[string]bool{
+		"transaction": true,
+		"budget":      true,
+		"bills":       true,
+		"account":     true,
+		"savings":     true,
+		"investment":  true,
+		"debt":        true,
+		"recurring":   true,
+		"spending":    true,
+		"health":      true,
 	}
 
-	// Budget category - "budget kategori", "budget makanan", "budget transport" (must check before general budget)
-	if utils.ContainsAny(msg, []string{"budget kategori", "budget makanan", "budget transport", "budget hiburan", "budget belanja", "budget entertainment", "budget shopping"}) {
-		return true, "budget", map[string]interface{}{"message": message}
+	if supportedIntents[intent] {
+		// Update conversation context
+		if s.conversationContextService != nil {
+			parsedEntities := ParsedEntitiesFromUtils(entities)
+			s.conversationContextService.UpdateContext("", "", intent, parsedEntities, message)
+		}
+		return true, intent, toolArgs
 	}
 
-	// Account creation - "tambah akun", "buka akun", "daftar akun", "buat akun"
-	if utils.ContainsAny(msg, []string{"tambah akun", "buka akun", "daftar akun", "buat akun", "register akun", "bikin akun", "buat rekening", "tambah rekening", "buka rekening"}) {
-		return true, "account", map[string]interface{}{"message": message}
+	// Unknown intent → send to AI for processing
+	return true, "ai", toolArgs
+}
+
+// ParsedEntitiesFromUtils converts utils.ParsedIntent to ConversationContext ParsedEntities
+func ParsedEntitiesFromUtils(e utils.ParsedIntent) ParsedEntities {
+	return ParsedEntities{
+		Action:   e.Action,
+		Amount:   e.Amount,
+		Category: e.Category,
+		Note:     e.Note,
+		Time:     e.Time,
 	}
-
-	// Account edit/update - "edit akun", "ubah akun", "update saldo"
-	if utils.ContainsAny(msg, []string{"edit akun", "ubah akun", "update akun", "ganti akun", "edit rekening", "topup", "tarik"}) {
-		return true, "account", map[string]interface{}{"message": message}
-	}
-
-	// Account delete - "hapus akun", "delete akun"
-	if utils.ContainsAny(msg, []string{"hapus akun", "delete akun", "hapus rekening"}) {
-		return true, "account", map[string]interface{}{"message": message}
-	}
-
-	// Recurring/subscription creation - "tambah langganan", "buatkan langganan", "langganan baru"
-	if utils.ContainsAny(msg, []string{"tambah langganan", "buatkan langganan", "langganan baru", "subscription baru", "buatkan subscription", "daftarin langganan"}) {
-		return true, "recurring", map[string]interface{}{"message": message}
-	}
-
-	// Recurring edit/delete - "edit langganan", "hapus langganan", "pause subscription"
-	if utils.ContainsAny(msg, []string{"edit langganan", "ubah langganan", "hapus langganan", "delete langganan", "pause langganan", "batal langganan"}) {
-		return true, "recurring", map[string]interface{}{"message": message}
-	}
-
-	// Savings creation - "buat tabungan", "buatkan tabungan", "target baru", "goal baru"
-	if utils.ContainsAny(msg, []string{"buat tabungan", "buatkan tabungan", "target baru", "goal baru", "tabungan baru", "target tabungan"}) {
-		return true, "savings", map[string]interface{}{"message": message}
-	}
-
-	// === PRIORITY 2: Standalone action words with context ===
-
-	// Budget - standalone keywords (check if not part of transaction context)
-	if utils.ContainsAny(msg, []string{"budget", "anggaran", "limit budget", "planning budget"}) &&
-		!utils.ContainsAny(msg, []string{"pengeluaran", "transaction", "transaksi", "beli", "makan"}) {
-		return true, "budget", map[string]interface{}{}
-	}
-
-	// Bills - tagihan, bill reminder (must check before "bayar" triggers transaction)
-	if utils.ContainsAny(msg, []string{"bill", "tagihan", "reminder", "jatuh tempo", "pembayaran", "bayar tagihan"}) {
-		return true, "bills", map[string]interface{}{"message": message}
-	}
-
-	// Recurring - transaksi berulang (check standalone)
-	if utils.ContainsAny(msg, []string{"recurring", "berulang", "auto debit", "otomatis", "langganan", "subscription", "member"}) {
-		return true, "recurring", map[string]interface{}{}
-	}
-
-	// Account - saldo, bank, e-wallet (check standalone)
-	if utils.ContainsAny(msg, []string{"saldo", "uang di", "bank", "e-wallet", "kartu debit", "kartu kredit", "akun", "rekening", "cash", "tunai"}) {
-		return true, "account", map[string]interface{}{}
-	}
-
-	// === PRIORITY 3: Transaction (only if explicit expense/income words) ===
-	// Only trigger transaction if there's clear expense/income context
-	expenseKeywords := []string{"pengeluaran", "income", "pemasukan", "gajian", "gaji", "dapet", "dapat", "earned", "salary", "spent", "uang keluar", "uang masuk"}
-	if utils.ContainsAny(msg, expenseKeywords) {
-		return true, "transaction", map[string]interface{}{"message": message}
-	}
-
-	// Transaction with explicit spending words (exclude "bayar tagihan" which is bills)
-	if utils.ContainsAny(msg, []string{"beli ", "buy ", "purchase", "transaction", "transaksi", "keluarkan", "keluar", "bayar ", "transfer ", "bayar ke"}) {
-		return true, "transaction", map[string]interface{}{"message": message}
-	}
-
-	// === PRIORITY 4: Other intents ===
-
-	// Investment - crypto, bitcoin, portfolio, stock, saham, harga
-	if utils.ContainsAny(msg, []string{"crypto", "bitcoin", "ethereum", "invest", "portfolio", "investasi", "trading", "saham", "stock", "stocks", "aapl", "googl", "msft", "tsla", "tesla", "apple", "google", "microsoft"}) {
-		return true, "investment", map[string]interface{}{"message": message}
-	}
-
-	// Investment suggestions/recommendations (only if explicit investment intent)
-	if utils.ContainsAny(msg, []string{"saran investasi", "rekomendasi investasi", "tips investasi", "investasikan", "beli saham", "beli crypto", "beli btc", "beli eth"}) {
-		return true, "investment", map[string]interface{}{"message": message}
-	}
-
-	// Debt - hutang, cicilan, pinjaman
-	if utils.ContainsAny(msg, []string{"hutang", "debt", "pinjaman", "kredit", "cicilan", "loan"}) {
-		return true, "debt", map[string]interface{}{"message": message}
-	}
-
-	// Savings - tabungan, target, save (only if not a question)
-	if utils.ContainsAny(msg, []string{"tabungan", "savings", "goal", "target", "menabung", "nabung", "save", "saved"}) &&
-		!utils.ContainsAny(msg, []string{"bagikan", "beritahu", "explain", "jelaskan", "berapa", "gimana", "how", "what", "why", "perlu"}) {
-		return true, "savings", map[string]interface{}{"message": message}
-	}
-
-	// Spending Analysis
-	if utils.ContainsAny(msg, []string{"analisa", "analysis", "spending", "pola", "total", "cek", "lihat", "bulanan", "bulan ini", "bulan lalu"}) {
-		return true, "spending", map[string]interface{}{"message": message}
-	}
-
-	// Financial Health
-	if utils.ContainsAny(msg, []string{"health", "kesehatan", "keuangan", "summary", "ringkasan"}) {
-		return true, "health", map[string]interface{}{"message": message}
-	}
-
-	return false, "", nil
 }
 
 // executeTool - Execute the appropriate tool
@@ -426,7 +386,12 @@ func (s *ChatbotService) executeTool(toolName string, args map[string]interface{
 		return cmd.Handle(userID, msg)
 	}
 
-	return "Maaf, saya tidak mengerti. Bisa jelaskan lagi?"
+	// Fallback: route unknown commands to AI
+	resp, err := s.callWithRetry(msg, context, nil)
+	if err != nil {
+		return "Maaf, saya tidak mengerti. Bisa jelaskan lagi?"
+	}
+	return resp
 }
 
 // callOllama - Call Ollama local AI
@@ -469,8 +434,14 @@ Be concise, friendly, and practical in your responses.`
 		"stream": false,
 	}
 
-	jsonData, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal request: %w", err)
+	}
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 60 * time.Second}
@@ -480,7 +451,10 @@ Be concise, friendly, and practical in your responses.`
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
 
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("Ollama error: %s", string(body))
@@ -498,6 +472,38 @@ Be concise, friendly, and practical in your responses.`
 	}
 
 	return "Maaf, ada masalah dengan respons AI.", nil
+}
+
+// callWithRetry - Generic AI call with retry and backoff
+func (s *ChatbotService) callWithRetry(message string, context map[string]interface{}, history []models.ChatMessage) (string, error) {
+	maxRetries := 2
+	backoffMs := []int{500, 2000} // 500ms, 2s
+
+	// Try external AI first if configured
+	if s.aiAPIKey != "" {
+		for attempt := 0; attempt <= maxRetries; attempt++ {
+			resp, err := s.callExternalAIWithHistory(message, context, history)
+			if err == nil {
+				return resp, nil
+			}
+			if attempt < maxRetries {
+				time.Sleep(time.Duration(backoffMs[attempt]) * time.Millisecond)
+			}
+		}
+	}
+
+	// Fallback to Ollama
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		resp, err := s.callOllamaWithHistory(message, context, history)
+		if err == nil {
+			return resp, nil
+		}
+		if attempt < maxRetries {
+			time.Sleep(time.Duration(backoffMs[attempt]) * time.Millisecond)
+		}
+	}
+
+	return "", fmt.Errorf("all AI services failed after %d retries", maxRetries+1)
 }
 
 // callOllamaWithHistory - Call Ollama with conversation history
@@ -572,8 +578,14 @@ Be concise, friendly, and practical in your responses.`
 		"stream":   false,
 	}
 
-	jsonData, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal request: %w", err)
+	}
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 60 * time.Second}
@@ -583,7 +595,10 @@ Be concise, friendly, and practical in your responses.`
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
 
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("Ollama error: %s", string(body))
@@ -634,8 +649,14 @@ func (s *ChatbotService) callOpenAI(message string, context map[string]interface
 		},
 	}
 
-	jsonData, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal request: %w", err)
+	}
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.openAIAPIKey)
 
@@ -646,7 +667,10 @@ func (s *ChatbotService) callOpenAI(message string, context map[string]interface
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
 
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("API error: %s", string(body))
@@ -783,7 +807,10 @@ Be concise, friendly, and practical in your responses.`
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
 
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("External AI API error (status %d): %s", resp.StatusCode, string(body))
@@ -884,6 +911,23 @@ func (s *ChatbotService) GetFinancialContext(userID string) map[string]interface
 			savingsSummary = append(savingsSummary, fmt.Sprintf("%s: %.1f%% complete", g.Name, progress))
 		}
 		context["savingsProgress"] = savingsSummary
+	}
+
+	// 5. Enhanced Spending Patterns (Personal Advisor Context)
+	if s.financeProfileService != nil {
+		profileContext := s.financeProfileService.GetProfileContext(userID)
+		if len(profileContext) > 0 {
+			context["spending_patterns"] = profileContext["spending_patterns"]
+			context["budget_adherence"] = profileContext["budget_adherence"]
+		}
+	}
+
+	// 6. Proactive Insights
+	if s.proactiveInsightService != nil {
+		insights := s.proactiveInsightService.GetInsightsForChatbot(userID)
+		if len(insights) > 0 {
+			context["proactive_insights"] = insights
+		}
 	}
 
 	return context

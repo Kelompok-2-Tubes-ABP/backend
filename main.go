@@ -74,6 +74,26 @@ func main() {
 		chatbotService.SetRAGService(ragService)
 	}
 
+	// Initialize Finance Profile Service for enhanced chatbot context
+	financeProfileService := services.NewFinanceProfileService(client, "mydb")
+	chatbotService.SetFinanceProfileService(financeProfileService)
+	fmt.Println("✅ Finance Profile Service initialized")
+
+	// Initialize Proactive Insight Service
+	proactiveInsightService := services.NewProactiveInsightService(client, "mydb")
+	chatbotService.SetProactiveInsightService(proactiveInsightService)
+	fmt.Println("✅ Proactive Insight Service initialized")
+
+	// Initialize Conversation Context Service
+	conversationContextService := services.NewConversationContextService(client, "mydb")
+	chatbotService.SetConversationContextService(conversationContextService)
+	fmt.Println("✅ Conversation Context Service initialized")
+
+	// Initialize Feedback Learning Service
+	feedbackLearningService := services.NewFeedbackLearningService(client, "mydb")
+	chatbotService.SetFeedbackLearningService(feedbackLearningService)
+	fmt.Println("✅ Feedback Learning Service initialized")
+
 	// Investment services
 	investmentService := services.NewInvestmentService(client, "mydb")
 	currencyService := services.NewCurrencyService(client, "mydb")
